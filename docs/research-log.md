@@ -120,3 +120,37 @@ The external SSD has approximately 130.3 GB free, sufficient in principle for da
 - **Storage:** Internal Linux filesystem under `data/cicids2017/`.
 - **Planned model:** Random Forest for supervised benign-versus-attack classification.
 - **Current status:** Dataset not yet downloaded; no training or evaluation results exist.
+
+## Dataset Download — Integrity Verification
+
+- **Dataset:** CIC-IDS2017 MachineLearningCSV.zip
+- **Source:** Official CIC dataset browser at https://cicresearch.ca/CICDataset/CIC-IDS-2017/
+- **Archive size:** Approximately 225 MB
+- **Integrity check:** Passed; copied archive is byte-for-byte identical to the downloaded archive.
+- **Expected and calculated MD5:** 4f83860afbf29cac8163854095bf6cf7
+- **Checksum-file caveat:** The supplied MD5 file references MachineLearningCVE.zip; the matching hash was verified explicitly against MachineLearningCSV.zip.
+- **Storage:** Internal Linux filesystem, under data/cicids2017/raw/.
+- **Current status:** Archive verified and copied; extraction, preprocessing, model training, and evaluation have not started.
+
+## Dataset Extraction — CIC-IDS2017
+
+- **Archive:** MachineLearningCSV.zip
+- **Extracted directory:** data/cicids2017/raw/MachineLearningCVE/
+- **CSV files extracted:** 8
+- **Reported extracted size:** 844 MiB
+- **Extraction status:** Completed without visible errors.
+- **Integrity status:** Archive MD5 was verified before extraction; individual extracted CSV contents have not yet been independently validated.
+- **Current status:** Dataset extracted; schema inspection and preprocessing have not started.
+
+
+## ML Environment and Initial Schema Inspection
+
+- **Python:** 3.12.3 in the project virtual environment `.venv`.
+- **Installed libraries:** pandas 3.0.6, NumPy 2.5.3, scikit-learn 1.9.1.
+- **CSV files inspected:** 8.
+- **Observed schema:** 79 columns per file, with a `Label` column.
+- **Inspection method:** At most 5,000 rows sampled per CSV using Python CSV streaming.
+- **Sample integrity:** No malformed-width rows observed in the inspected samples; this does not establish full-file integrity.
+- **Sample labels:** Most sampled rows were BENIGN; the Friday PortScan sample contained 7 PortScan rows among its first 5,000 rows.
+- **Data-cleaning consideration:** Column names contain inconsistent spacing and will require normalization.
+- **Current status:** Dependencies installed and initial schema inspection complete; full preprocessing, training, and evaluation have not started.
