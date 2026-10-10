@@ -359,3 +359,22 @@ The full audit found very rare classes, including Heartbleed (11 rows), SQL Inje
 - No model-performance claims are made at this stage.
 - Before model training, validate the processed CSV schemas, row counts, labels, and remaining missing/non-finite values. Then design a leakage-aware split and fit imputation only on training data.
 
+## Processed Dataset Validation
+
+**Status: Completed.**
+
+The validation script `ml/preprocessing/validate_processed_dataset.py` checked all eight processed CIC-IDS2017 CSV files using chunked reading.
+
+- **Total records:** 2,830,743; matched the audited source counts.
+- **Schema:** 78 columns per file, comprising 77 features and one `Label` column.
+- **Missing feature values:** 5,734.
+- **Infinite feature values:** 0.
+- **Missing labels:** 0.
+- **Labels containing the Unicode replacement character:** 0.
+- **Label distributions:** Inspected for all eight files.
+- **Validation outcome:** PASS.
+
+The processed files retain missing feature values; imputation has not been applied. No train/test split, model training, or model evaluation has been performed.
+
+**Next step:** Design a leakage-aware evaluation split, accounting for the severe class imbalance and rare attack categories in CIC-IDS2017. Fit preprocessing transformations using training data only and evaluate on held-out data.
+
