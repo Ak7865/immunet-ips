@@ -1,0 +1,30 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Generated machine-learning artifacts
+ml/models/*
+!ml/models/.gitkeep
+
+# Traffic captures and datasets
+*.pcap
+*.pcapng
+data/
+datasets/
+
+# Runtime logs
+*.log
+logs/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
