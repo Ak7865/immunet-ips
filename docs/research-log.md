@@ -1144,3 +1144,259 @@ Independently checked `data/cicids2017/processed/binary_feature_shift_by_label.c
 
 **Next action:** Review the Git working-tree status and diffs before selecting files for a commit.
 
+### Capture-Holdout Attack-Family Investigation — 11 October 2026
+
+**Status:** Planned; no new evaluation executed.
+
+**Motivation:** The capture-holdout binary classifier produced 2,175 false negatives among 2,180 attack records, with only 5 true positives and attack recall of approximately 0.23%. Aggregate binary metrics do not show whether the errors are concentrated in a particular attack family.
+
+**Research question:** How does the existing capture-holdout model perform separately on Web Attack Brute Force, Web Attack XSS, and Web Attack Sql Injection in the held-out Thursday morning WebAttacks capture?
+
+**Planned measurements for each original attack label:**
+- Number of actual attack records.
+- True positives and false negatives.
+- Attack recall, calculated as `TP / (TP + FN)`.
+- Number of records predicted BENIGN and ATTACK.
+
+**Constraints:**
+1. Reuse the existing capture-holdout model and its held-out capture.
+2. Do not retrain or tune the model during this investigation.
+3. Preserve the original attack labels for analysis rather than merging them into ATTACK.
+4. Do not use Friday diagnostic data as an untouched final test set.
+5. Report per-family counts alongside recall, because small classes can make metrics unstable.
+
+**Interpretation limitation:** The held-out attack families are absent from the eligible training captures, and the entire capture is held out. Therefore, attack-family novelty and capture-level distribution shift remain confounded. This investigation can characterize the errors but cannot independently establish their cause.
+
+**Next action:** Inspect the existing capture-holdout evaluation script and report to identify how predictions and original labels can be recovered without retraining.
+
+### Per-Family Capture-Holdout Evaluation Design — 11 October 2026
+
+**Status:** Design recorded; implementation not started.
+
+Inspection of `binary_capture_holdout_report.json` confirms that the report stores aggregate binary metrics, not individual predictions or per-family results.
+
+The existing `iter_csv_chunks()` function in `ml/training/train_binary_capture_holdout.py` converts original labels into binary values using `labels != "BENIGN"`. This is suitable for binary training and evaluation but does not preserve the original attack-family distinctions for per-family analysis.
+
+**Planned approach:** Create a separate evaluation-only script that loads `ml/models/binary_random_forest_capture_holdout.joblib`, reads the held-out Thursday WebAttacks capture in chunks, retains the original `Label` values, and evaluates predictions separately for:
+- `Web Attack Brute Force`
+- `Web Attack XSS`
+- `Web Attack Sql Injection`
+
+**Measurements:** For each original attack family, report actual record count, TP, FN, predicted BENIGN count, predicted ATTACK count, and attack recall. Also report totals and verify reconciliation against the previously recorded aggregate attack counts.
+
+**Constraints:**
+1. Do not retrain or tune the model.
+2. Do not modify the existing training script or model artifact.
+3. Use only the already designated held-out capture for this investigation.
+4. Preserve original labels and report small-family counts explicitly.
+5. Do not treat this analysis as an independent final test, because attack-family novelty and capture-level distribution shift remain confounded.
+
+**Next action:** Implement and validate the separate evaluation-only script, then compare its aggregate predictions with the recorded confusion matrix before interpreting per-family results.
+
+### Saved Model Feature-Metadata Verification — 11 October 2026
+
+**Objective:** Verify the saved binary capture-holdout model's feature metadata and the source evaluation report before running the per-family diagnostic.
+
+**Reason:** The training pipeline may have been fitted using NumPy arrays rather than a pandas DataFrame. Consequently, the saved model may not expose `feature_names_in_`. The evaluation script must use a reliable feature schema and preserve the original feature order.
+
+**Planned checks:**
+1. Inspect the source report's recorded feature names and test-set counts.
+2. Inspect the saved model's pipeline steps and available feature metadata.
+3. Confirm the feature count and ordering expected by the model.
+4. Correct the evaluation script if necessary before running predictions.
+
+**Safety and validity:** This is an evaluation-only diagnostic. It must reuse the existing model, avoid retraining, and verify aggregate counts against the previously recorded evaluation report.
+
+**Status:** Pending metadata inspection.
+
+### Capture-Holdout Feature-Schema Correction — 11 October 2026
+
+**Finding:** The saved model is a scikit-learn Pipeline with `imputer` and `classifier` steps. It expects 77 features, but `feature_names_in_` is unavailable.
+
+**Correction:** The per-family evaluation script must obtain the expected feature names from `binary_capture_holdout_report.json`, verify that exactly 77 features are recorded, and compare the held-out CSV's feature names and ordering against that recorded schema.
+
+**Validation requirements:**
+- Preserve original attack-family labels.
+- Reuse the saved model without retraining.
+- Check aggregate attack counts and false negatives against the existing report.
+- Do not run predictions until the schema correction is saved and syntax checks pass.
+
+**Status:** Metadata inspected; script correction pending.
+
+### Per-Family Capture-Holdout Evaluation — Execution Preparation — 11 October 2026
+
+**Pre-execution checks:** The evaluation script passed Python syntax compilation and `git diff --check` after the feature-schema correction.
+
+**Evaluation objective:** Measure how the existing binary Random Forest performs separately on Web Attack Brute Force, Web Attack XSS, and Web Attack Sql Injection in the held-out Thursday WebAttacks capture.
+
+**Expected safeguards:**
+- Reuse the existing saved model; do not retrain.
+- Validate feature names and ordering against the source report.
+- Reconcile total rows, attack rows, false negatives, and true positives against the existing aggregate results.
+- Save a JSON report containing family-level counts and recall.
+- Interpret results as diagnostic evidence, not proof that attack-family novelty alone caused the poor recall.
+
+**Status:** Syntax and whitespace checks passed; evaluation pending.
+
+### Evaluation Script Runtime Error — Feature Metadata — 11 October 2026
+
+**Observed error:** `AttributeError: 'SimpleImputer' object has no attribute 'feature_names_in_'`.
+
+**Cause:** The evaluation script still accesses `model.feature_names_in_`, even though the saved pipeline was fitted without retaining feature-name metadata.
+
+**Impact:** Evaluation stopped during feature-schema validation, before the held-out capture was evaluated.
+
+**Correction:** Replace the remaining old feature-metadata lookup with the feature list stored in `binary_capture_holdout_report.json`. Retain the 77-feature count and ordering checks.
+
+**Status:** Runtime error identified; correction pending. No new evaluation results produced.
+
+### Per-Family Capture-Holdout Results — 11 October 2026
+
+**Experiment:** Existing binary Random Forest evaluated on the held-out Thursday Morning WebAttacks capture, retaining original attack-family labels.
+
+**Aggregate reconciliation:**
+- Total rows: 170,366
+- Actual attack rows: 2,180
+- Attacks predicted BENIGN: 2,175
+- Attacks predicted ATTACK: 5
+- Aggregate counts matched the existing evaluation report.
+
+**Family-level results:**
+
+| Family | Actual | TP | FN | Recall |
+|---|---:|---:|---:|---:|
+| Web Attack Brute Force | 1,507 | 0 | 1,507 | 0.00% |
+| Web Attack XSS | 652 | 3 | 649 | 0.46% |
+| Web Attack Sql Injection | 21 | 2 | 19 | 9.52% |
+
+**Interpretation:** Detection performance is extremely poor on this held-out capture despite the high aggregate accuracy previously reported. SQL Injection recall is based on only 21 records and should be interpreted cautiously.
+
+**Limitations:** This is a diagnostic evaluation, not an independent final test. Attack-family novelty and capture-level distribution shift remain confounded. The evaluation emitted scikit-learn warnings because feature names were supplied to an imputer fitted without feature names; the run nevertheless completed and aggregate reconciliation passed.
+
+**Artifact:** `data/cicids2017/processed/binary_capture_holdout_by_family.json`
+
+**Status:** Family-level diagnostic completed; further investigation pending.
+
+### Saved Pipeline Preprocessing Inspection — 11 October 2026
+
+**Pipeline:** `SimpleImputer(strategy='median')` followed by `RandomForestClassifier(max_depth=20, min_samples_leaf=2, n_jobs=2, random_state=42)`.
+
+**Findings:**
+- The imputer and classifier each expect 77 features.
+- The imputer has no `feature_names_in_` attribute.
+- The classifier's classes are `[0, 1]`, representing BENIGN and ATTACK in the binary experiment.
+- The evaluation supplies named pandas DataFrames to a pipeline whose imputer was fitted without feature names, producing scikit-learn warnings.
+
+**Planned correction:** Pass the validated feature matrix to the existing pipeline as a NumPy array in the exact feature order recorded in the source report. Do not retrain or modify the saved model.
+
+**Validation:** Rerun the evaluation and confirm that warnings disappear and aggregate counts still reconcile with the existing report.
+
+**Status:** Cause identified; correction pending.
+
+### Verified Per-Family Evaluation and Warning Resolution — 11 October 2026
+
+**Status:** Evaluation completed successfully after converting the validated feature matrix to NumPy before prediction.
+
+**Validation results:**
+- Python syntax check passed.
+- `git diff --check` passed.
+- Scikit-learn feature-name warnings no longer appeared.
+- Total held-out rows: 170,366.
+- Actual attacks: 2,180.
+- False negatives: 2,175.
+- True positives: 5.
+- Aggregate counts reconciled with the original capture-holdout report.
+
+**Attack-family results:**
+
+| Attack family | Actual | TP | FN | Recall |
+|---|---:|---:|---:|---:|
+| Web Attack Brute Force | 1,507 | 0 | 1,507 | 0.00% |
+| Web Attack XSS | 652 | 3 | 649 | 0.46% |
+| Web Attack Sql Injection | 21 | 2 | 19 | 9.52% |
+
+**Interpretation:** The saved model has extremely poor attack detection on this held-out capture. The results justify further investigation, but do not independently establish the cause of the performance failure.
+
+**Artifact:** `data/cicids2017/processed/binary_capture_holdout_by_family.json`
+
+**Next action:** Review the current working-tree changes and prepare a reproducible commit only after inspecting the diff and confirming that no unintended files are included.
+
+### Git Change Review Preparation — 11 October 2026
+
+**Objective:** Review the working tree after the per-family evaluation and warning-resolution changes.
+
+**Checks:**
+1. Identify modified and staged files.
+2. Summarize tracked-file changes.
+3. Check for whitespace errors.
+4. Identify untracked files, including the new evaluation script and generated report if applicable.
+
+**Safety:** No files will be staged, committed, or pushed during this inspection. Generated datasets, model artifacts, and unrelated files must not be included in a commit without explicit review.
+
+**Status:** Review pending.
+
+### Pre-Commit Content Review — 11 October 2026
+
+**Git status:** One modified tracked file and one untracked Python script.
+
+**Files under review:**
+- `docs/research-log.md`
+- `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Review objectives:**
+1. Confirm the research log documents the evaluation findings and validation steps.
+2. Confirm the evaluation script uses feature names from the source report.
+3. Confirm feature count and ordering are validated.
+4. Confirm the feature matrix is converted to NumPy after numeric coercion and non-finite-value handling.
+5. Confirm aggregate reconciliation checks remain present.
+
+**Safety:** No staging, committing, or pushing until the review is complete.
+
+**Status:** Content review pending.
+
+### Feature-Schema Validation Review — 11 October 2026
+
+**Finding:** The evaluation script obtains `expected_features` from the source report, but its empty-list validation checks `original_features` instead of `expected_features`.
+
+**Risk:** If the source report lacks the feature list, the script may fail later with a less informative error instead of stopping at the schema-validation stage.
+
+**Correction:** Change the guard to `if not expected_features:` and retain the feature-count and ordering checks.
+
+**Other checks:** The script handles non-finite values before converting the feature matrix to NumPy, and aggregate row and prediction counts are reconciled against the existing report.
+
+**Status:** One validation correction required before final review and commit.
+
+### Final Pre-Commit Verification — 11 October 2026
+
+**Validation correction:** The feature-schema guard now checks `expected_features`, the list loaded from the source evaluation report.
+
+**Checks passed:**
+- Python compilation completed without errors.
+- `git diff --check` completed without errors.
+- The corrected guard was confirmed in the evaluation script.
+
+**Files expected to change:**
+- `docs/research-log.md`
+- `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Next action:** Review the final diff, confirm the intended files only, then stage and commit the research log and evaluation script together. Do not include datasets, trained models, or generated evaluation reports.
+
+**Status:** Validation correction complete; final review pending.
+
+### Final Script and Research-Log Review — 11 October 2026
+
+**Review outcome:**
+- `docs/research-log.md` contains the evaluation findings and workflow notes.
+- `ml/evaluation/evaluate_capture_holdout_by_family.py` uses the feature schema from the source report.
+- The script validates feature count and ordering.
+- Non-finite values are replaced before NumPy conversion.
+- Aggregate row, attack, false-negative, and true-positive counts are reconciled against the original report.
+- The evaluation completed without scikit-learn feature-name warnings.
+- `git diff --check` passed.
+
+**Pending files:** The research log is modified, and the evaluation script is untracked.
+
+**Next action:** Stage only these two files, inspect the staged diff, and commit only after confirming that the staged content is correct.
+
+**Status:** Review complete; staging pending.
+
