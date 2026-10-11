@@ -640,7 +640,7 @@ The revised implementation includes feature-schema checks, a fixed 300,000-recor
 
 Training has therefore been deferred until the sampling implementation is reviewed for memory efficiency. No holdout performance results are available at this stage.
 
-**Status:** Compilation verified; memory-efficiency review 
+**Status:** Compilation verified; memory-efficiency review
 
 #### Memory-Efficient Training Sample Selection — Planned Improvement
 
@@ -702,4 +702,293 @@ These results establish basic functional correctness of the tested sampling proc
 4. Continue documenting findings without overstating generalization or production effectiveness.
 
 **Session status:** Implementation and preliminary tests completed; capture-holdout training pending.
+
+### Research Session Resume — 11 October 2026
+
+#### Previous Session Checkpoint
+The previous session's source code and research-log changes were committed and pushed to the GitHub `main` branch in commit `90d7163`. The local working tree was clean after the push.
+
+The capture-level dataset audit identified Thursday morning WebAttacks as a suitable holdout candidate. The synthetic sampling test passed checks for exact sample size, reproducibility, and feature-label alignment.
+
+#### Work Remaining
+1. Remove trailing whitespace reported during the previous Git checks.
+2. Review the holdout sampler for correctness and memory efficiency.
+3. Verify feature schema and sampling behavior before training.
+4. Execute the holdout experiment only after the implementation passes these checks.
+5. Record actual evaluation results without changing the existing baseline or Friday diagnostic results.
+
+The holdout model has not been trained, and its performance remains unknown.
+
+**Status:** Project resumed; implementation review is the next task.
+
+#### Source Formatting and Static Verification — Planned
+
+The previous Git commit reported trailing whitespace in the research log and two Python scripts. These formatting issues will be removed without changing the experimental logic.
+
+After cleanup, the affected scripts will be checked for Python syntax errors, and Git whitespace checks will be rerun. The capture-holdout model will remain untrained during this step.
+
+**Status:** Formatting cleanup and static verification planned; results pending.
+
+#### Source Formatting and Static Verification — Results
+
+Trailing whitespace was removed from the research log, prediction-confidence evaluation script, and capture-holdout training script. Both affected Python scripts passed syntax compilation. The Git whitespace check completed without reporting errors in the tracked changes.
+
+The research log and two Python scripts are modified in the working tree. These changes have not yet been committed or pushed.
+
+**Status:** Formatting cleanup and syntax verification completed; capture-holdout training remains pending.
+
+#### Capture-Holdout Sampler Review — Planned
+
+The source formatting cleanup and Python syntax checks completed successfully. The next step is to review the capture-holdout sampler for statistical correctness, reproducibility, feature-schema consistency, and peak-memory requirements.
+
+The current implementation retains a fixed-size sample by selecting records with the smallest random keys. Its synthetic test passed, but the full-dataset implementation has not yet been validated against an independent reference sample or measured for peak memory consumption.
+
+The review will also verify that the held-out Thursday morning WebAttacks capture is excluded from training and that preprocessing is fitted exclusively on training data. No model training will occur during this review.
+
+**Status:** Sampler review planned; holdout experiment not yet executed.
+
+#### Capture-Holdout Script Review — Findings
+
+The capture-holdout training script and WSL memory availability were inspected. The environment reported approximately 5.6 GiB of available memory at the time of inspection.
+
+The code review identified suspicious formatting and variable-name inconsistencies in the saved script, including the feature-column list construction and a variable name in the sampling cleanup block. These issues must be resolved before the script can be considered ready for execution.
+
+The key-based sampling strategy remains a candidate for selecting a reproducible, fixed-size sample, but the implementation has not yet passed a complete runtime check on the actual project script. Peak memory usage also remains unmeasured.
+
+No model training was performed, and no new evaluation results were produced.
+
+**Status:** Code review identified corrections required before training.
+
+### Capture-Holdout Script: Static Verification
+
+The capture-level holdout training script was reviewed and corrected for feature-schema validation, variable naming, and report-description consistency. Python bytecode compilation is used as a syntax check. This check does not establish that the script is free of runtime errors or that the sampling and training pipeline produces valid experimental results. A full-data training run has not yet been performed.
+
+### Capture-Holdout Script Review
+
+A source review confirmed that the proposed experiment separates the Thursday morning WebAttacks capture from the eligible training captures, uses a reproducible key-based training sample, fits median imputation within the training pipeline, and evaluates the held-out capture in chunks. The evaluation code will be strengthened by validating confusion-matrix totals against the observed test-row and class counts and by simplifying classification-report generation. These are pre-experiment code-review findings; no capture-holdout model has been trained and no performance results are available yet.
+
+### Capture-Holdout Preflight Verification — 11 October 2026
+
+The capture-holdout training script passed Python bytecode compilation and `git diff --check`. All five required processed CSV files were confirmed to exist: Monday, Tuesday, Wednesday, Thursday afternoon Infiltration, and Thursday morning WebAttacks. The model and processed-data output directories also exist. The working tree contains modifications to the research log, prediction-confidence inspection script, and capture-holdout training script. No capture-holdout training or performance evaluation has been completed at this checkpoint.
+
+### Capture-Holdout Experiment Readiness — 11 October 2026
+
+The capture-holdout script passed Python bytecode compilation. All required input captures and output directories were verified, and the model and report paths are distinct from the existing baseline artifacts. The configured experiment uses a reproducible 300,000-row sample, a median imputer, a 100-tree Random Forest with maximum depth 20 and two parallel jobs, and chunked evaluation of the complete Thursday morning WebAttacks capture. Available memory before launch was approximately 5.3 GiB. Training has not yet started; performance results remain pending.
+
+### Capture-Holdout Experiment Results — 11 October 2026
+
+**Status:** Completed successfully.
+
+**Experimental setup**
+- Training captures: Monday, Thursday afternoon Infiltration, Tuesday, and Wednesday.
+- Held-out capture: Thursday morning WebAttacks.
+- Eligible training rows: 1,957,132.
+- Training sample: 300,000 rows, comprising 259,291 BENIGN and 40,709 ATTACK.
+- Features: 77.
+- Model: median imputation and RandomForestClassifier with 100 trees, maximum depth 20, minimum leaf size 2, random seed 42, and two parallel jobs.
+- Held-out records evaluated: 170,366.
+- Runtime: 80.11 seconds.
+
+**Observed results**
+
+Confusion matrix, with actual classes as rows and predicted classes as columns:
+
+| Actual class | Predicted BENIGN | Predicted ATTACK |
+|---|---:|---:|
+| BENIGN | 168,130 | 56 |
+| ATTACK | 2,175 | 5 |
+
+Overall accuracy was 0.9869 (98.69%). BENIGN precision was 0.9872, recall 0.9997, and F1-score 0.9934. ATTACK precision was 0.0820, recall 0.0023, and F1-score 0.0045.
+
+The model detected only 5 of 2,180 attack records and missed 2,175. It generated 56 false positives. The high overall accuracy therefore does not reflect effective attack detection.
+
+**Interpretation and limitations**
+
+The held-out WebAttacks capture contains attack families absent from the eligible training captures. The very low attack recall indicates poor generalization in this experiment. These results do not establish performance on all unseen attack families or production traffic. The experiment is evidence that the current model is not suitable for deployment as an intrusion prevention system without further investigation and improvement.
+
+**Artifacts**
+
+- Model: `ml/models/binary_random_forest_capture_holdout.joblib`
+- Report: `data/cicids2017/processed/binary_capture_holdout_report.json`
+- Script: `ml/training/train_binary_capture_holdout.py`
+
+The model and report are local experimental artifacts; no claim of production effectiveness is made.
+
+### Comparison of Friday Diagnostic and Thursday WebAttacks Holdout — 11 October 2026
+
+Both experiments used a Random Forest with 100 trees, maximum depth 20, minimum leaf size 2, median imputation, and a 300,000-row training sample. The evaluation sets differed in capture source, size, and attack composition.
+
+| Metric | Friday diagnostic | Thursday WebAttacks holdout |
+|---|---:|---:|
+| Test records | 703,245 | 170,366 |
+| Accuracy | 70.46% | 98.69% |
+| ATTACK precision | 99.72% | 8.20% |
+| ATTACK recall | 28.18% | 0.23% |
+| ATTACK F1-score | 43.94% | 0.45% |
+| False negatives | 207,518 | 2,175 |
+
+The Friday diagnostic was previously examined and is not an untouched final test set. The Thursday WebAttacks capture was held out from model fitting and contains attack families absent from the eligible training captures.
+
+The Thursday result demonstrates that high overall accuracy can coexist with extremely poor attack detection when benign traffic dominates the test set. Attack recall decreased substantially between these two evaluation settings. Because capture source and attack-family composition differ simultaneously, the comparison does not establish which factor caused the performance difference.
+
+**Conclusion:** The current baseline does not meet the requirements for a dependable intrusion prevention system. Further investigation should focus on capture-level generalization, attack-family coverage, and class-specific detection performance. No production-effectiveness claim is justified by these experiments.
+
+### Diagnostic Investigation Plan — 11 October 2026
+
+Following the capture-holdout experiment, the next investigation will examine the existing feature-importance, prediction-confidence, and feature-distribution diagnostic scripts and their available outputs.
+
+The investigation will focus on:
+1. Identifying which features the current Random Forest relies on most heavily.
+2. Examining the prediction confidence associated with missed attacks, where saved diagnostic outputs permit.
+3. Reviewing differences in feature distributions between training data and the held-out capture.
+4. Distinguishing observed evidence from hypotheses about why attack detection failed.
+
+The Friday diagnostic and Thursday WebAttacks holdout results will be treated as diagnostic evidence, not as unbiased final-test estimates. The held-out capture will not be used to tune the model and then presented as an untouched final test set.
+
+No new model configuration has been selected. The next experiment will be chosen only after reviewing the available diagnostic evidence.
+
+### Initial Feature-Importance and Confidence Findings — 11 October 2026
+
+The existing diagnostic artifacts were inspected. These artifacts primarily describe the original Friday-diagnostic baseline model and should not be confused with diagnostics from the newer Thursday capture-holdout model.
+
+**Feature importance:** The five highest impurity-based feature-importance scores were Destination Port (0.087714), Bwd Packet Length Std (0.070899), Packet Length Variance (0.066286), Bwd Packet Length Mean (0.051191), and Avg Bwd Segment Size (0.049015). These scores describe the baseline Random Forest's use of features; they do not establish causality or generalization.
+
+**Prediction confidence:** In the existing sampled diagnostics, the baseline predicted all 2,000 sampled PortScan attack records as BENIGN and all 1,966 sampled Bot attack records as BENIGN. Median attack probability was 0.0000 for both groups. These observations indicate severe detection failures for those sampled records. They do not establish the full probability distribution for every record or prove that threshold adjustment cannot help in other cases.
+
+**Data inspection note:** The confidence CSV uses `True_Label`, not `ActualLabel`; an attempted summary grouped by the nonexistent column and raised a `KeyError`. The file itself was readable. Feature-distribution and label-specific shift reports exist and require further examination.
+
+**Current interpretation:** Feature-distribution differences and low attack probabilities are plausible investigation leads, not established causes of the Thursday holdout failure. No model changes or threshold tuning have been performed as part of this diagnostic review.
+
+### Feature-Distribution Comparison Findings — 11 October 2026
+
+**Reports examined**
+- `top_feature_distributions_binary.csv`
+- `feature_shift_by_label.csv`
+
+**Scope:** The inspected distribution summaries compare Mon–Thu training captures with Friday diagnostic captures. They do not directly compare the Thursday WebAttacks holdout against the training set.
+
+**Observed differences**
+- The sampled median `Destination Port` for ATTACK records was 80 in the training group and 8,080 in the Friday diagnostic group.
+- The sampled median `Destination Port` for BENIGN records was 443 in the training group and 3,268 in the Friday diagnostic group.
+- The sampled median `Packet Length Variance` for ATTACK records was 65.33 in training and 12 in the Friday diagnostic group.
+- The displayed medians for `Bwd Packet Length Std` were zero for ATTACK records in both groups, despite different third quartiles.
+
+**Interpretation and limitations**
+
+These summaries provide evidence of differences between sampled training and Friday diagnostic feature distributions. They do not establish that feature shift caused the model's errors. The datasets also differ in attack-family composition, and the capture-holdout experiment cannot isolate capture effects from unseen attack-family effects.
+
+The Thursday WebAttacks holdout result remains a separate evaluation: 5 of 2,180 attacks detected, with attack recall of approximately 0.23%. The inspected CSV summaries are not direct measurements of that holdout's feature shift.
+
+**Decision:** Do not change model parameters or claim a causal explanation based on these summaries alone. Further analysis should quantify feature differences by dataset and label, while clearly separating observations from hypotheses.
+
+### Feature-Shift Report Coverage Audit — 11 October 2026
+
+**Report:** `data/cicids2017/processed/feature_shift_by_label.csv`
+
+**Structure:** 208 rows, with columns `Label`, `Dataset`, `Feature`, `Sample_Count`, `Missing_Count`, `Median`, `Mean`, and `Std`. The report summarizes 13 selected features for each recorded label and dataset combination.
+
+**Coverage findings**
+- BENIGN has summaries for all 13 selected features in both `Mon-Thu training` and `Friday diagnostic`.
+- DDoS, PortScan, and Bot have summaries only in the Friday diagnostic group.
+- DoS GoldenEye, DoS Hulk, DoS Slowhttptest, DoS slowloris, FTP-Patator, Heartbleed, Infiltration, and SSH-Patator have summaries only in the Mon–Thu training group.
+- Web Attack Brute Force, Web Attack Sql Injection, and Web Attack XSS have no entries in this particular report, because these attack families belong to the separately held-out Thursday WebAttacks capture.
+
+**Interpretation**
+
+The current report supports a feature-distribution comparison for BENIGN records only. It does not support a same-attack-family distribution comparison between the training and Friday diagnostic groups, because no attack family appears in both groups in this report.
+
+The absence of matching attack labels is a limitation of the report's grouping and dataset composition; it is not evidence that the model cannot generalize to all attack families. The separate Thursday WebAttacks holdout result provides evidence of poor detection on that held-out capture, but it does not isolate the cause.
+
+**Next action:** Inspect the existing report-generation scripts and determine whether a more appropriate binary-label comparison can be produced from the available data without changing the trained model. Keep any new analysis explicitly separate from the held-out Thursday evaluation.
+
+### Review of Feature-Shift Report Generator — 11 October 2026
+
+**Script reviewed:** `ml/evaluation/inspect_feature_shift_by_label.py`
+
+The script samples up to 2,000 records per original label per capture using random priorities and a fixed random seed of 42. It summarizes 13 selected numeric features using sample count, missing count, median, mean, and standard deviation.
+
+The script preserves original multiclass labels rather than mapping records to binary `BENIGN` and `ATTACK` labels. The training capture list includes the Thursday morning WebAttacks capture, while the Friday captures form the diagnostic group. This report therefore represents the original Mon–Thu versus Friday diagnostic comparison, not the later Thursday WebAttacks capture-holdout experiment.
+
+Because most attack labels appear in only one group, the existing report supports a same-label distribution comparison only for BENIGN. The per-label sampling also means its summaries are not complete-dataset statistics.
+
+**Planned next step:** Develop a separate, reproducible binary feature-shift diagnostic that compares BENIGN and ATTACK samples from the existing Mon–Thu training and Friday diagnostic groups. Preserve the original report and script. Interpret pooled ATTACK results cautiously because different attack families may have different feature distributions. Do not retrain or tune the model as part of this diagnostic step.
+
+### Binary Feature-Shift Diagnostic — Script Validation — 11 October 2026
+
+Created `ml/evaluation/inspect_binary_feature_shift.py` as a separate diagnostic script. It maps the original `BENIGN` label to `BENIGN` and all other labels to `ATTACK`, then samples each binary class independently within each capture. Sampling uses a fixed random seed of 42 and a maximum of 2,000 records per binary class per capture.
+
+The script uses chunked CSV reading and summarizes 13 numeric features. Its intended output is `data/cicids2017/processed/binary_feature_shift_by_label.csv`. The script passed Python syntax validation using `python -m py_compile`.
+
+No dataset, trained model, or existing diagnostic script was modified as part of this validation. The diagnostic has not yet been executed; its output and runtime remain unverified.
+
+### Binary Feature-Shift Diagnostic Results — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_binary_feature_shift.py`
+
+**Output:** `data/cicids2017/processed/binary_feature_shift_by_label.csv`
+
+The diagnostic completed successfully across the eight configured capture files. It used chunked CSV reading, random-priority sampling, and seed 42, with up to 2,000 records per binary class per capture.
+
+**Sample counts**
+- Mon–Thu training: 10,000 BENIGN and 6,036 ATTACK records.
+- Friday diagnostic: 6,000 BENIGN and 5,966 ATTACK records.
+
+These counts describe the diagnostic sample, not the complete datasets.
+
+**Selected median comparisons**
+
+| Feature | Binary label | Mon–Thu training | Friday diagnostic |
+|---|---|---:|---:|
+| Flow Duration | BENIGN | 30,802 | 49,184.5 |
+| Flow Duration | ATTACK | 5,618,066 | 63,608 |
+| Flow Packets/s | BENIGN | 128.09 | 78.44 |
+| Flow Packets/s | ATTACK | 1.20 | 113.98 |
+| Init_Win_bytes_forward | BENIGN | 122 | 139.5 |
+| Init_Win_bytes_forward | ATTACK | 29,200 | 8,192 |
+
+**Interpretation and limitations**
+
+The sampled feature distributions differ between Mon–Thu training and Friday diagnostic data, particularly for ATTACK records. However, the binary ATTACK group combines different attack families. The observed differences may reflect attack-family composition, capture conditions, or both; this analysis does not establish causation.
+
+Friday remains diagnostic data, not an untouched final test set. These results do not directly measure feature shift in the Thursday WebAttacks capture-holdout experiment.
+
+**Next action:** Validate the generated CSV's structure, class coverage, sample counts, and missing-value summaries before drawing further conclusions. No model retraining or tuning was performed.
+
+### Binary Feature-Shift Report Validation — 11 October 2026
+
+**Validated file:** `data/cicids2017/processed/binary_feature_shift_by_label.csv`
+
+The report passed the structural validation checks.
+
+- Total rows: 52, corresponding to 13 features across two datasets and two binary labels.
+- All four dataset/label combinations contain all 13 expected features.
+- Recorded sample counts match the expected values: 10,000 training BENIGN, 6,036 training ATTACK, 6,000 Friday BENIGN, and 5,966 Friday ATTACK.
+- No missing median, mean, or standard-deviation values were found.
+- No negative missing counts or missing counts greater than sample counts were found.
+
+Some feature observations are missing. For example, the Friday ATTACK sample has 10 missing values each for `Flow Packets/s` and `Flow Bytes/s`. The report records these through `Missing_Count`.
+
+**Conclusion:** The report is structurally consistent with the expected sampling counts and feature coverage. This validation does not establish model generalization, prove that feature shift caused detection errors, or validate the Thursday capture-holdout result.
+
+No model retraining or tuning was performed.
+
+### Capture-Holdout Metric Formula Verification — 11 October 2026
+
+**Script checked:** `ml/training/train_binary_capture_holdout.py`
+
+Python syntax validation passed. A reference calculation using scikit-learn's `confusion_matrix` and `classification_report` reproduced the previously recorded confusion matrix:
+
+`[[168130, 56], [2175, 5]]`
+
+The reference classification metrics were:
+
+- BENIGN precision: 0.987229; recall: 0.999667; F1-score: 0.993409; support: 168,186.
+- ATTACK precision: 0.081967; recall: 0.002294; F1-score: 0.004462; support: 2,180.
+- Accuracy: 0.986905.
+
+These values agree with the formulas implemented in the staged capture-holdout script. The model misses 2,175 of 2,180 attacks in this evaluation. High accuracy therefore does not imply effective attack detection.
+
+**Limitation:** This check reconstructs the previously recorded confusion matrix; it does not rerun model training or independently verify the original predictions. The result supports the conclusion that the evaluated model is inadequate for the tested holdout, not a claim that every possible model or configuration will fail.
+
+No model retraining or tuning was performed.
 

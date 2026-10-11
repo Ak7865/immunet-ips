@@ -9,7 +9,7 @@ import pandas as pd
 import sklearn
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import confusion_matrix
 from sklearn.pipeline import Pipeline
 
 
@@ -106,7 +106,7 @@ def main():
     rng = np.random.default_rng(RANDOM_STATE)
     sample_keys = np.empty(0, dtype=np.float64)
     sample_X = np.empty(
-        (0, len(expected_features)), 
+        (0, len(expected_features)),
         dtype=np.float32
     )
     sample_y = np.empty(0, dtype=np.int8)
@@ -131,12 +131,12 @@ def main():
 
             if len(chunk_keys) > TRAINING_SAMPLE_SIZE:
                 candidate_indices = np.argpartition(
-                    chunk_keys, 
+                    chunk_keys,
                     TRAINING_SAMPLE_SIZE - 1,
                     )[:TRAINING_SAMPLE_SIZE]
             else:
                 candidate_indices = np.arange(len(chunk_keys))
-            
+
             candidate_keys = chunk_keys[candidate_indices]
             candidate_X = X_chunk[candidate_indices]
             candidate_y = y_chunk[candidate_indices]
@@ -145,7 +145,7 @@ def main():
                 (sample_keys, candidate_keys)
             )
             combined_X = np.concatenate(
-                (sample_X, candidate_X), 
+                (sample_X, candidate_X),
                 axis=0,
             )
             combined_y = np.concatenate(
@@ -153,13 +153,13 @@ def main():
             )
 
             keep_count = min(
-                TRAINING_SAMPLE_SIZE, 
+                TRAINING_SAMPLE_SIZE,
                 len(combined_keys),
             )
 
             if len(combined_keys) > keep_count:
                 keep = np.argpartition(
-                    combined_keys, 
+                    combined_keys,
                     keep_count - 1,
                 )[:keep_count]
             else:
@@ -171,7 +171,7 @@ def main():
 
             del(
                 X_chunk,
-                Y_chunk,
+                y_chunk,
                 chunk_keys,
                 candidate_keys,
                 candidate_X,
@@ -181,7 +181,7 @@ def main():
                 combined_y,
                 keep,
             )
-            
+
 
     if len(sample_y) != TRAINING_SAMPLE_SIZE:
         raise ValueError(
@@ -223,6 +223,8 @@ def main():
 
     del sample_X, sample_y, sample_keys
 
+
+
     # Evaluate the entire held-out capture in chunks.
     total_confusion = np.zeros((2, 2), dtype=np.int64)
     test_rows = 0
@@ -245,20 +247,29 @@ def main():
         test_class_counts[0] += int((y_chunk == 0).sum())
         test_class_counts[1] += int((y_chunk == 1).sum())
 
+    # Confusion matrix: actual rows, predicted columns.
     tn, fp = total_confusion[0]
     fn, tp = total_confusion[1]
 
-    # Construct aggregate class metrics from the accumulated confusion matrix.
-    y_true_aggregate = np.repeat(
-        [0, 0, 1, 1],
-        [int(tn), int(fp), int(fn), int(tp)],
-    )
-    y_pred_aggregate = np.repeat(
-        [0, 1, 0, 1],
-        [int(tn), int(fp), int(fn), int(tp)],
-    )
+    if int(total_confusion.sum()) != test_rows:
+        raise ValueError(
+            "Confusion matrix sum does not match test rows."
+        )
 
-    accuracy = float((tn + tp) / test_rows)
+    if int(total_confusion[0].sum()) != test_class_counts[0]:
+        raise ValueError(
+            "BENIGN confusion-matrix total does not match observed labels."
+        )
+
+    if int(total_confusion[1].sum()) != test_class_counts[1]:
+        raise ValueError(
+            "ATTACK confusion-matrix total does not match observed labels."
+        )
+
+    accuracy = float((tn + tp) / test_rows) if test_rows else 0.0
+
+    benign_f1_denominator = 2 * tn + fp + fn
+    attack_f1_denominator = 2 * tp + fp + fn
 
     report = {
         "experiment": "Thursday WebAttacks capture holdout",
@@ -297,14 +308,28 @@ def main():
         "accuracy": accuracy,
         "false_positives": int(fp),
         "false_negatives": int(fn),
-        "classification_report": classification_report(
-            y_true_aggregate,
-            y_pred_aggregate,
-            labels=[0, 1],
-            target_names=["BENIGN", "ATTACK"],
-            output_dict=True,
-            zero_division=0,
-        ),
+        "classification_report": {
+            "BENIGN": {
+                "precision": float(tn / (tn + fn))
+                if (tn + fn) else 0.0,
+                "recall": float(tn / (tn + fp))
+                if (tn + fp) else 0.0,
+                "f1-score": float(
+                    2 * tn / benign_f1_denominator
+                ) if benign_f1_denominator else 0.0,
+                "support": int(tn + fp),
+            },
+            "ATTACK": {
+                "precision": float(tp / (tp + fp))
+                if (tp + fp) else 0.0,
+                "recall": float(tp / (tp + fn))
+                if (tp + fn) else 0.0,
+                "f1-score": float(
+                    2 * tp / attack_f1_denominator
+                ) if attack_f1_denominator else 0.0,
+                "support": int(fn + tp),
+            },
+        },
         "scikit_learn_version": sklearn.__version__,
         "elapsed_seconds": round(time.time() - started, 2),
         "limitations": [
@@ -343,6 +368,7 @@ def main():
     print(f"\nSaved model: {MODEL_PATH}")
     print(f"Saved report: {REPORT_PATH}")
     print(f"Elapsed time: {report['elapsed_seconds']:.2f}s")
+
 
 
 if __name__ == "__main__":
