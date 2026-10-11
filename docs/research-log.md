@@ -3279,3 +3279,2454 @@ The staged whitespace check passed before the commit. The five evaluation script
 
 **Status:** Local commit created; remote push pending.
 
+### Suricata Integration Decision — 11 October 2026
+
+**Decision:** Begin the network-monitoring integration in detection-only mode while continuing to investigate the current ML baseline's poor attack-family generalization.
+
+**Planned sequence:**
+1. Configure Suricata inside the isolated project laboratory.
+2. Verify traffic capture and inspect generated events.
+3. Establish a benign-traffic baseline.
+4. Generate one controlled test attack against the lab application.
+5. Verify whether Suricata generates a corresponding alert.
+6. Evaluate Suricata alerts and ML predictions independently.
+7. Consider controlled prevention only after the detection pipeline and event mapping are validated.
+
+**Safety constraints:** Attack traffic must remain within the isolated laboratory. No automatic blocking is enabled during the initial experiments.
+
+**Limitation:** The current CIC-IDS2017 Random Forest baseline detected only 5 of 2,180 attacks in the held-out WebAttacks evaluation. It is not ready to be trusted as an automatic prevention mechanism.
+
+**Status:** Decision recorded; Suricata configuration and live detection testing have not yet been completed.
+
+### Suricata Environment Preflight — 11 October 2026
+
+**Objective:** Inspect the existing WSL environment before beginning Suricata integration.
+
+**Checks planned:**
+- Confirm the operating system and kernel environment.
+- Check whether Docker is installed and responding.
+- Check whether Docker Compose is available.
+- Check whether Suricata is installed and identify its version.
+- Check whether the project already contains a Suricata configuration or Compose service.
+
+**Safety constraint:** This step is inspection only. It will not install packages, start containers, capture traffic, generate attacks, or modify firewall rules.
+
+**Next action:** Run the environment checks and choose the smallest required setup step based on their results.
+
+**Status:** Preflight planned; environment results pending.
+
+### Suricata Environment Preflight Results — 11 October 2026
+
+**Environment:** Ubuntu 24.04.5 LTS under WSL2, kernel `6.6.87.2-microsoft-standard-WSL2`.
+
+**Findings:**
+- The `docker` command is unavailable inside the Ubuntu distribution.
+- Docker's diagnostic recommends enabling Docker Desktop WSL integration.
+- Docker Compose is unavailable because Docker CLI access is missing.
+- Suricata is not installed on the Ubuntu host.
+- No matching Suricata or Compose configuration files were found within the project's searched directory depth.
+
+**Decision:** Restore Docker CLI access through Docker Desktop's WSL integration before selecting and configuring the Suricata container.
+
+**Safety:** No packages were installed, containers started, traffic captured, or firewall rules changed.
+
+**Status:** Preflight complete; Docker integration setup pending.
+
+### Docker Desktop WSL Integration Check — 11 October 2026
+
+**Objective:** Restore Docker CLI access from Ubuntu 24.04 under WSL2.
+
+**Planned checks:**
+- Confirm Docker Desktop is installed and running on Windows.
+- Inspect Docker Desktop's WSL integration settings.
+- Confirm integration is enabled for the Ubuntu distribution.
+- Recheck Docker CLI access from Ubuntu after applying any required setting changes.
+
+**Safety:** This step changes no project files, installs no packages, starts no attack simulations, and modifies no firewall rules.
+
+**Next action:** Inspect Docker Desktop and enable the existing WSL integration if necessary.
+
+**Status:** Windows-side Docker Desktop check pending.
+
+### Docker Desktop WSL Integration Verified — 11 October 2026
+
+**Environment:** Ubuntu 24.04.5 LTS under WSL2.
+
+**Verification results:**
+- Docker CLI is accessible inside Ubuntu.
+- Docker version: `29.0.1`, build `eedd969`.
+- Docker Compose version: `v2.40.3-desktop.1`.
+- Docker server responds successfully with version `29.0.1`.
+
+**Decision:** Use the existing Docker Desktop WSL integration for the planned containerized Suricata environment. Do not install a separate Docker Engine in Ubuntu.
+
+**Next action:** Check Docker container and network availability, then choose an isolated lab topology for Suricata testing.
+
+**Status:** Docker access verified; Suricata not yet installed or configured.
+
+### Docker Lab Preflight — 11 October 2026
+
+**Objective:** Inspect the existing Docker environment before creating the Suricata lab.
+
+**Checks planned:**
+- List running containers.
+- List all containers, including stopped containers.
+- List existing Docker networks.
+- Verify that Docker can run a basic container without changing project services.
+
+**Safety:** No existing containers or networks will be removed or modified. No attack traffic will be generated.
+
+**Next action:** Review the Docker inventory and select an isolated network topology for the Suricata experiment.
+
+**Status:** Preflight note recorded; inspection pending.
+
+### Docker Inventory Results — 11 October 2026
+
+**Environment:** Docker Desktop accessed from Ubuntu 24.04 under WSL2.
+
+**Observed state:**
+- Running containers: 0.
+- Existing containers: 26.
+- Docker networks: `bridge`, `fabric_test`, `grocery_default`, `host`, and `none`.
+- Docker images: 14, occupying approximately 3.172 GB.
+- Existing project resources include Hyperledger Fabric containers and a grocery application PostgreSQL container.
+
+**Decision:** Preserve existing containers, images, networks, and volumes. Create a dedicated network for the IPS lab instead of reusing existing project networks.
+
+**Design consideration:** Suricata must be connected to a suitable traffic-capture path. Docker network membership alone does not guarantee visibility into all lab traffic.
+
+**Next action:** Check available memory and disk capacity, then choose the smallest practical isolated lab topology.
+
+**Status:** Docker inventory complete; no existing resources modified.
+
+### IPS Lab Resource Preflight — 11 October 2026
+
+**Objective:** Check available memory, filesystem capacity, and Docker storage before downloading or starting Suricata.
+
+**Checks planned:**
+- Inspect WSL memory and swap availability.
+- Check free disk space for the project filesystem.
+- Check Docker image, container, and volume storage usage.
+
+**Safety:** Inspection only. No images will be pulled, containers started, or resources deleted.
+
+**Next action:** Review resource availability and select an appropriate Suricata container configuration.
+
+**Status:** Resource preflight pending.
+
+### IPS Lab Resource Preflight Results — 11 October 2026
+
+**Environment:** Ubuntu 24.04 under WSL2 with Docker Desktop integration.
+
+**Observed resources:**
+- Total memory: approximately 6.8 GiB.
+- Available memory at inspection: approximately 5.1 GiB.
+- Total swap: 2 GiB; approximately 1.3 GiB free.
+- Project filesystem: approximately 948 GiB available.
+- Docker images: 3.172 GB.
+- Docker volumes: approximately 257.6 MB.
+
+**Decision:** Proceed with a lightweight Suricata container experiment, monitoring memory consumption during startup and traffic capture. Avoid concurrent ML training during initial live testing.
+
+**Limitations:** The reported available memory is a snapshot and may change. Actual Suricata resource requirements depend on configuration and traffic volume.
+
+**Next action:** Identify a suitable Suricata image and confirm the configuration needed for a safe detection-only lab.
+
+**Status:** Resource preflight passed; image selection and configuration pending.
+
+### Suricata Image Selection — 11 October 2026
+
+**Candidate image:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Source:** Docker Hub documentation for the openEuler CloudNative SIG Suricata image.
+
+**Rationale:**
+- The image documentation lists Suricata 8.0.4 and supports the `amd64` architecture.
+- Containerized execution avoids installing Suricata directly into the Ubuntu host.
+- The initial experiment will use detection-only operation.
+- The lab will eventually verify traffic visibility and generated JSON events before integrating the ML service.
+
+**Limitations:** Image availability, architecture compatibility, runtime configuration, and required Linux capabilities must be verified before starting the container. This candidate has not yet been pulled or tested.
+
+**Next action:** Inspect the candidate image's published metadata and verify the host architecture.
+
+**Status:** Candidate selected; image inspection pending.
+
+### Suricata Image Compatibility Check — 11 October 2026
+
+**Objective:** Verify the local architecture and inspect the candidate container image metadata before downloading it.
+
+**Checks planned:**
+- Identify the WSL architecture.
+- Check whether the candidate image tag is already present locally.
+- Inspect the local image metadata if available.
+- Determine whether a remote image pull is needed.
+
+**Safety:** Inspection only; no container starts, traffic capture, firewall changes, or image downloads.
+
+**Next action:** Review the command output before deciding whether to pull the image.
+
+**Status:** Compatibility check pending.
+
+### Suricata Image Compatibility Results — 11 October 2026
+
+**Findings:**
+- WSL architecture: `x86_64`.
+- Docker server architecture: `x86_64`.
+- Candidate image `openeuler/suricata:8.0.4-oe2403sp4` is not present locally.
+- No existing local Docker image matching `suricata` was found.
+
+**Decision:** Verify the candidate image tag and its published architecture before downloading it.
+
+**Safety:** No image was pulled, no container was started, and no network or firewall configuration was changed.
+
+**Next action:** Verify image availability and provenance, then decide whether to pull it.
+
+**Status:** Local architecture verified; remote image verification pending.
+
+### Suricata Remote Image Verification — 11 October 2026
+
+**Image candidate:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Source checked:** Docker Hub documentation for `openeuler/suricata`.
+
+**Findings:**
+- The repository identifies the image as maintained by the openEuler CloudNative SIG.
+- The published tag list identifies `8.0.4-oe2403sp4` as Suricata 8.0.4 on openEuler 24.03-LTS-SP4.
+- The published architecture list includes `amd64` and `arm64`.
+- The local WSL and Docker server architecture is `x86_64`, compatible with `amd64`.
+
+**Limitations:** This was a documentation check. The image has not been pulled, its local digest has not been recorded, and runtime behavior has not been tested.
+
+**Next action:** Pull the selected image and inspect its local metadata before starting any container.
+
+**Status:** Published tag and architecture verified; image pull pending.
+
+### Suricata Image Download — 11 October 2026
+
+**Image:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Result:** Docker successfully pulled the image.
+
+**Recorded digest:** `sha256:c765ec1015f929c9b8ca2fcde8138f00e805124e02c2398af085aef28a0ff96a`
+
+**Storage:** Docker reports approximately 1.07 GB of disk usage for the image.
+
+**Inspection issue:** The metadata inspection command failed when accessing `.Config.Cmd`, because that field is absent from the image configuration. This does not indicate a failed image download.
+
+**Safety:** No Suricata container has been started; no traffic capture or firewall changes have occurred.
+
+**Next action:** Inspect the image metadata using fields that are available, identify the documented entrypoint and startup behavior, and check the supported Suricata command-line options before creating a container.
+
+**Status:** Image downloaded; startup configuration inspection pending.
+
+### Suricata Image Metadata Verified — 11 October 2026
+
+**Image:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Verified metadata:**
+- Image ID: `sha256:c765ec1015f929c9b8ca2fcde8138f00e805124e02c2398af085aef28a0ff96a`
+- OS: `linux`
+- Architecture: `amd64`
+- Image creation timestamp: `2026-07-10T09:38:13.95551403Z`
+- Entrypoint: `/entrypoint.sh`
+- Default command: absent (`null`)
+- Working directory: `/`
+- Configured user: empty
+- Image labels: absent (`null`)
+
+**Decision:** Inspect the image entrypoint and available Suricata command-line options before starting a container. Do not assume the image runs as a non-root user or has a safe default command.
+
+**Status:** Image metadata verified; startup behavior remains unverified.
+
+### Suricata Entrypoint Inspection — 11 October 2026
+
+**Objective:** Determine how the downloaded container image starts Suricata and which command-line options are available.
+
+**Checks planned:**
+- Read `/entrypoint.sh` from the image without executing it as a service.
+- Inspect the Suricata executable's version and help output.
+- Identify the expected configuration file and startup arguments, if documented by the image.
+- Avoid unnecessary Linux capabilities and privileged container settings.
+
+**Safety:** No persistent container, live capture, attack traffic, or firewall modification.
+
+**Next action:** Inspect the entrypoint and executable help, then design a minimal detection-only container configuration.
+
+**Status:** Inspection planned; startup behavior not yet verified.
+
+### Suricata Entrypoint Inspection Results — 11 October 2026
+
+**Verified:**
+- Suricata reports version `8.0.4 RELEASE`.
+- The executable supports offline PCAP processing (`-r`), live interface capture (`-i`), configuration testing (`-T`), and JSON-compatible logging through its configuration.
+- The image entrypoint copies files from `/etc/suricata.dist/` into `/etc/suricata/` when destination files do not exist.
+- The entrypoint checks `sys_nice` and `net_admin` capabilities.
+- When those capability checks fail, the entrypoint warns that it will run as root. If both pass, it attempts to run Suricata as the `suricata` user.
+
+**Safety decision:** Do not use privileged mode or add Linux capabilities until the selected capture method requires them. Prefer offline PCAP testing or another minimal-permission method where practical.
+
+**Next action:** Inspect the default configuration files and logging settings before running Suricata against any traffic.
+
+**Status:** Version and help verified; default configuration and capture behavior not yet tested.
+
+### Suricata Default Configuration Inspection — 11 October 2026
+
+**Image inspected:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Findings:**
+- `/etc/suricata.dist/` contains `update.yaml`.
+- The expected `/etc/suricata.dist/suricata.yaml` file was not found.
+- The configuration summary returned no matching settings because the expected file was absent.
+- Suricata's executable and help output were available in earlier checks.
+
+**Interpretation:** The configuration path and startup requirements remain unresolved. The missing file at this specific path does not establish that no configuration exists elsewhere in the image.
+
+**Next action:** Inspect the image filesystem for `suricata.yaml`, rule files, and relevant configuration directories. Do not start live capture or grant additional privileges until the configuration requirements are understood.
+
+**Status:** Default configuration not found at the expected path; filesystem inspection pending.
+
+### Suricata Filesystem Inspection Results — 11 October 2026
+
+**Image:** `openeuler/suricata:8.0.4-oe2403sp4`
+
+**Findings:**
+- The executable exists at `/usr/bin/suricata`.
+- `/etc/suricata/` and `/etc/suricata.dist/` contain `update.yaml`, but no `suricata.yaml` was found.
+- `/usr/share/suricata/rules/` contains built-in protocol event rule files.
+- `/usr/share/suricata/classification.config` and `/usr/share/suricata/reference.config` are present.
+- `/var/lib/suricata/` exists but contains no files at inspection time.
+
+**Interpretation:** The image's configuration requirements are not yet satisfied for a normal detection run. The presence of protocol event rules does not establish that a complete attack-signature ruleset is installed.
+
+**Next action:** Check the image documentation for its intended configuration source and startup procedure. If necessary, prepare a project-owned minimal configuration and validate it with Suricata's configuration-test mode before any traffic capture.
+
+**Safety:** No live capture, attack traffic, firewall changes, or persistent containers were used.
+
+**Status:** Executable and built-in event rules verified; complete detection configuration remains pending.
+
+### Suricata Image Startup Documentation Review — 11 October 2026
+
+**Source reviewed:** Published documentation for `openeuler/suricata`.
+
+**Findings:**
+- The image documentation describes mounting `/etc/suricata` for configuration files.
+- Its example for live interface capture uses host networking and `net_admin`, `net_raw`, and `sys_nice` capabilities.
+- The local image does not contain `suricata.yaml` in the inspected configuration directories.
+- The documented live-capture example is not appropriate as the default for this project's first isolated test.
+
+**Decision:** Do not start live capture with host networking or add Linux capabilities at this stage. Prepare and validate a project-owned Suricata configuration, then begin with a controlled detection test.
+
+**Next action:** Determine the safest source for a version-compatible configuration and establish how to validate it before use.
+
+**Status:** Startup documentation reviewed; configuration preparation pending.
+
+### Suricata Configuration Source Decision — 11 October 2026
+
+**Decision:** Use the official OISF Suricata 8.0.4 configuration template as the reference for the project-owned configuration.
+
+**Rationale:**
+- The downloaded container reports Suricata `8.0.4 RELEASE`.
+- The container image does not contain `suricata.yaml` in the inspected configuration directories.
+- The official OISF repository provides the Suricata configuration template.
+- Version-matched configuration reduces the risk of using unsupported or changed options.
+- Project-owned configuration files can be reviewed, version-controlled, and tested independently of the container image.
+
+**Constraints:**
+- Keep configuration under the project directory.
+- Do not modify host system configuration.
+- Do not enable live capture, inline IPS mode, host networking, or extra Linux capabilities at this stage.
+- Validate the configuration with Suricata's `-T` option before processing any traffic.
+
+**Next action:** Retrieve the version-matched template into a project-local location, inspect its variables and placeholders, and prepare a valid configuration for offline testing.
+
+**Status:** Configuration source selected; retrieval and validation pending.
+
+### Suricata 8.0.4 Configuration Template Retrieved — 11 October 2026
+
+**Source:** Official OISF Suricata repository, tag `suricata-8.0.4`.
+
+**File:** `config/suricata/suricata.yaml.in`
+
+**Download result:** Successful.
+
+**File size:** 93,543 bytes; 2,355 lines.
+
+**Inspection findings:**
+- The file is a build-time template rather than a directly usable runtime configuration.
+- Placeholders include `@PACKAGE_VERSION@`, `@MAJOR_MINOR@`, `@e_logdir@`, `@prefix@`, `@e_enable_evelog@`, `@e_sysconfdir@`, and `@e_defaultruledir@`.
+- Logging, plugin, run-directory, and rule-path settings depend on build-time values.
+
+**Decision:** Preserve the original template. Do not rename it directly to `suricata.yaml` or replace placeholders indiscriminately.
+
+**Next action:** Inspect the relevant configuration sections and determine a safe, version-compatible way to generate a runtime configuration with valid paths and EVE JSON logging.
+
+**Status:** Template downloaded and inspected; runtime configuration not yet generated or validated.
+
+### Suricata Runtime Configuration Preparation — 11 October 2026
+
+**Objective:** Determine how to convert the official Suricata 8.0.4 template into a valid runtime configuration for the container image.
+
+**Checks planned:**
+- Inventory all remaining template placeholders.
+- Inspect EVE JSON output configuration.
+- Inspect default rule and configuration paths.
+- Identify network settings that need to remain suitable for offline testing.
+- Preserve the original template unchanged.
+
+**Safety constraints:** Do not substitute placeholders blindly, generate attack traffic, start live capture, enable IPS mode, or grant additional container capabilities.
+
+**Next action:** Review the relevant configuration sections and determine the minimum changes needed for a valid runtime configuration.
+
+**Status:** Template downloaded; runtime configuration preparation in progress.
+
+### Suricata Configuration Path and Ruleset Audit — 11 October 2026
+
+**Findings:**
+- The official Suricata 8.0.4 template contains unresolved build-time placeholders.
+- EVE JSON output is configured as `eve.json`, but its enabled setting is a placeholder.
+- The template expects `suricata.rules` and references classification and reference configuration files.
+- The template includes AF_PACKET and PCAP interface examples; these do not mean live capture is currently enabled.
+- The container inspection previously found classification and reference files, but no complete `suricata.yaml` or full `suricata.rules` file in the inspected locations.
+
+**Decision:** Verify the container's actual configuration, rules, and log directories before generating the runtime configuration. Do not assume distribution paths from the template.
+
+**Safety:** No live capture, inline IPS, or additional Linux capabilities will be enabled during this audit.
+
+**Status:** Template inspected; container path and ruleset audit pending.
+
+### Suricata Ruleset Availability and Build Paths — 11 October 2026
+
+**Findings:**
+- The container runs Suricata 8.0.4 RELEASE with detection support.
+- The image includes protocol-event rule files under `/usr/share/suricata/rules/`.
+- No complete `suricata.rules` file was found in the inspected rule directories.
+- Classification and reference configuration files exist under `/usr/share/suricata/`.
+- Build information reports `/usr/etc/suricata/` as the configuration directory and `/usr/var/log/suricata/` as the log directory.
+
+**Decision:** Do not assume the image contains a complete attack-signature ruleset. Inspect the installed `suricata-update` utility and its configured sources before selecting a ruleset.
+
+**Safety constraints:** Do not download or enable rules yet, start packet capture, or change existing Docker resources.
+
+**Next action:** Inspect updater version, help, and source configuration.
+
+**Status:** Image paths and available rule files audited; updater inspection pending.
+
+### Suricata Ruleset Updater Inspection — 11 October 2026
+
+**Findings:**
+- Installed utility: `suricata-update` 1.3.7.
+- Supported operations include listing sources, listing enabled sources, enabling/disabling sources, adding sources, and updating rules.
+- The inspected update configuration contains a reload command but no explicit source configuration.
+- The updater's help output confirms that a custom configuration file and output directory can be specified.
+
+**Decision:** Inspect the available and enabled ruleset sources before selecting a source or downloading rules.
+
+**Safety constraints:** Do not run `update`, `update-sources`, or `enable-source` yet. Do not modify the container image or existing Docker resources.
+
+**Next action:** Query the updater's source index and current enabled-source list.
+
+**Status:** Updater capabilities verified; source selection pending.
+
+### Suricata Ruleset Source Inventory — 11 October 2026
+
+**Tool:** `suricata-update` 1.3.7
+**Suricata:** 8.0.4 RELEASE
+
+**Available source findings:**
+- `et/open`: Emerging Threats Open Ruleset, vendor Proofpoint, MIT license.
+- `oisf/trafficid`: Suricata Traffic ID ruleset, vendor OISF, MIT license.
+- The updater lists additional community and commercial sources, but they have not been selected.
+
+**Currently enabled sources:**
+- `et/open`
+- `oisf/trafficid`
+
+**Important distinction:** An enabled source is not proof that its rules have already been downloaded, installed, or loaded by a running Suricata process.
+
+**Decision:** Retain the two currently enabled sources for initial detection-only evaluation. Before downloading, verify the updater's source metadata and determine how to direct its output to a project-local directory.
+
+**Safety constraints:** Do not enable additional sources, run a rules update, start packet capture, or enable inline IPS.
+
+**Status:** Source inventory complete; project-local rules retrieval pending.
+
+### Suricata Updater Output and Source Definitions — 11 October 2026
+
+**Findings:**
+- `suricata-update` 1.3.7 supports a custom rules output directory through `-o` and a custom data directory through `-D`.
+- The container stores source definitions under `/usr/var/lib/suricata/update/sources/`.
+- Source-definition files exist for `et/open` and `oisf/trafficid`.
+- The project-local `rules/suricata/` directory does not yet exist.
+
+**Decision:** Inspect the enabled-source definitions before retrieving rules. Future rule output should be directed to a project-local directory, and the original container image and existing Docker resources must remain unchanged.
+
+**Safety constraints:** No rule downloads, source changes, live capture, or IPS-mode changes during this inspection.
+
+**Status:** Updater output options confirmed; source definitions identified for inspection.
+
+### Suricata Enabled-Source Definitions Verified — 11 October 2026
+
+**Source definitions inspected:**
+- `/usr/var/lib/suricata/update/sources/et-open.yaml`
+  - Source: `et/open`
+  - Checksum verification: enabled
+- `/usr/var/lib/suricata/update/sources/oisf-trafficid.yaml`
+  - Source: `oisf/trafficid`
+
+**Interpretation:** The updater has definitions for the two enabled sources. This does not establish that their rules are downloaded, validated, or loaded into a running Suricata process.
+
+**Decision:** Keep the container image unchanged and use a project-local workspace for subsequent ruleset retrieval and validation. Preserve the original template and keep live capture and inline prevention disabled.
+
+**Next action:** Inspect existing project ignore rules and directory conventions before creating a persistent rules workspace.
+
+**Status:** Source definitions verified; project-local rules workspace preparation pending.
+
+### Suricata Rules Workspace and Git Hygiene — 11 October 2026
+
+**Objective:** Check the repository's existing ignore rules and directory conventions before preparing a persistent, project-local Suricata rules workspace.
+
+**Checks planned:**
+- Inspect the root `.gitignore`, if present.
+- Check existing ignore rules relevant to Suricata configuration, downloaded rules, logs, and runtime data.
+- Inspect the current project directory structure and Git status.
+- Identify whether the proposed rules directory conflicts with existing project files.
+
+**Safety constraints:**
+- Do not modify files during this inspection.
+- Do not delete, prune, or alter existing Docker resources.
+- Do not download rules or start packet capture.
+- Preserve the original Suricata template.
+
+**Next action:** Use the inspection results to determine the appropriate project-local rules directory and Git ignore policy.
+
+**Status:** Source definitions verified; repository hygiene inspection pending.
+
+### Suricata Rules Directory and Git Ignore Decision — 11 October 2026
+
+**Repository findings:**
+- The project has an existing `docker/suricata/` directory containing `.gitkeep`.
+- The official template is located at `config/suricata/suricata.yaml.in`.
+- Root `.gitignore` already excludes `data/` and `logs/`.
+- No tracked Suricata rules files were found.
+- Current Git status includes an uncommitted research-log change and untracked `config/suricata/`.
+
+**Decision:** Keep configuration under `config/suricata/`. Use a separate project-local `rules/suricata/` directory for downloaded rules, rather than mixing them with Docker files or configuration templates.
+
+**Git policy:** Review and add a narrow ignore rule for downloaded/generated rules if appropriate. Do not ignore the configuration template or research documentation. Do not stage or commit files as part of this step.
+
+**Safety constraints:** Preserve existing files and Docker resources; do not download or activate rules yet.
+
+**Status:** Repository structure reviewed; rules directory and ignore policy selected for implementation.
+
+### Project-Local Suricata Rules Workspace Created — 11 October 2026
+
+**Planned changes:**
+- Add a narrow `.gitignore` rule for downloaded/generated Suricata rules.
+- Create `rules/suricata/` as the project-local destination for the ruleset.
+- Preserve `config/suricata/suricata.yaml.in` and all research documentation in Git.
+- Leave existing Docker-related files unchanged.
+
+**Rationale:** Third-party rules can change independently of the project and may be large. Keeping generated rules out of routine commits avoids accidental vendor-rule redistribution while allowing the project to document its ruleset source and retrieval procedure.
+
+**Safety constraints:** No rules are downloaded or enabled in this step. No Docker resources are changed. No files are staged or committed.
+
+**Status:** Implementation planned; repository changes pending verification.
+
+### Suricata Rules Workspace Setup Verified — 11 October 2026
+
+**Changes made:**
+- Added `/rules/suricata/*` to the root `.gitignore`.
+- Added an exception for `/rules/suricata/.gitkeep`.
+- Created `rules/suricata/.gitkeep`.
+
+**Verification:**
+- `git check-ignore` identifies `rules/suricata/example.rules` as ignored.
+- `.gitkeep` is explicitly exempted from the ignore rule.
+- Git reports the expected pending changes in `.gitignore`, the research log, and the untracked configuration and rules directories.
+
+**Status:** Project-local rules workspace created. No rules have been downloaded or activated.
+
+**Next action:** Retrieve the enabled rules into the project-local workspace using an isolated, temporary container and validate the resulting files before configuring Suricata to load them.
+
+### Suricata Ruleset Retrieval Plan — 11 October 2026
+
+**Objective:** Retrieve the enabled `et/open` and `oisf/trafficid` rules into `rules/suricata/` without modifying the container image or host-level Suricata paths.
+
+**Planned approach:**
+- Run the existing Suricata 8.0.4 container as a temporary, one-off updater.
+- Mount the project-local rules directory as the output destination.
+- Use an isolated, project-local updater data directory for caches and source metadata.
+- Preserve the original template and existing project files.
+- Inspect the resulting rules and updater output before configuring Suricata to load them.
+
+**Safety constraints:**
+- Do not use `--privileged`, host networking, or additional Linux capabilities.
+- Do not start live capture or inline IPS.
+- Do not remove, prune, or alter existing Docker resources.
+- Do not commit downloaded third-party rules.
+
+**Validation requirements:** Confirm retrieval status, resulting files, and rule counts before proceeding to runtime configuration.
+
+**Status:** Retrieval approach planned; updater execution not yet performed.
+
+### Suricata Rules Retrieval Execution — 11 October 2026
+
+**Preconditions:**
+- Project-local rules directory exists at `rules/suricata/`.
+- Git ignores downloaded/generated rules while preserving `.gitkeep`.
+- Enabled sources are `et/open` and `oisf/trafficid`.
+- Suricata 8.0.4 and `suricata-update` 1.3.7 are available in the container image.
+
+**Execution plan:**
+- Use a temporary updater container with explicit mounts for rules output and updater state.
+- Keep all persistent output under the project directory.
+- Review the updater result and generated rule files before using them.
+
+**Safety constraints:**
+- No live packet capture or inline IPS.
+- No privileged container, host networking, or additional capabilities.
+- No changes to existing Docker resources.
+- No Git staging or commit of downloaded rules.
+
+**Status:** Ready for the retrieval command; ruleset download has not yet been attempted.
+### Suricata Ruleset Retrieval Completed — 11 October 2026
+
+**Execution:** Ran `suricata-update` 1.3.7 in a temporary container using the Suricata 8.0.4 image, with the output directory mounted to the project-local `rules/suricata/` path.
+
+**Sources retrieved:**
+- `et/open` — Emerging Threats Open Ruleset.
+- `oisf/trafficid` — Suricata Traffic ID ruleset.
+
+**Updater-reported results:**
+- Total rules loaded: 69,105.
+- Rules disabled: 15.
+- Rules enabled: 53,149.
+- Flowbit dependency rules enabled: 136.
+- Combined output: `/rules/suricata.rules`.
+- Classification output: `/rules/classification.config`.
+- Updater completed successfully.
+
+**Limitations:**
+- The source index was reported as older than two weeks.
+- Rule testing was skipped using `--no-test`.
+- Successful retrieval does not prove the rules are compatible with the final project configuration or loaded by Suricata.
+
+**Safety:** No live capture or inline IPS was started. No additional Linux capabilities or host networking were requested.
+
+**Next action:** Inspect the generated files, their sizes, rule counts, and Git ignore behavior before configuring Suricata to load them.
+
+**Status:** Retrieval completed; file inspection and runtime validation pending.
+
+### Downloaded Suricata Ruleset Inspected — 11 October 2026
+
+**Files verified:**
+- `rules/suricata/suricata.rules`: 69,105 lines; 45,892,735 bytes.
+- `rules/suricata/classification.config`: 43 lines; 3,228 bytes.
+- `rules/suricata/.gitkeep`: present.
+
+**Rule-file checks:**
+- Updater-reported total rules: 69,105.
+- Local rule-file line count: 69,105.
+- Rules with active `alert`, `drop`, `reject`, or `pass` actions: 53,149.
+- Unique signature IDs: 69,105.
+- Git ignore verification succeeded for both downloaded files.
+
+**Limitations:** Line counts and unique signature IDs are structural checks, not proof of rule correctness or runtime compatibility. The updater was run with `--no-test`, so Suricata has not yet validated this ruleset against the project configuration.
+
+**Status:** Downloaded files and Git ignore behavior verified; runtime validation pending.
+
+**Next action:** Prepare a runtime configuration from the version-matched template, using the confirmed project-local rule and classification paths, then validate it with Suricata's configuration-test mode before processing traffic.
+
+### Runtime Configuration Preparation — Template Section Review — 11 October 2026
+
+**Objective:** Identify the minimum template sections needed to prepare a valid Suricata 8.0.4 runtime configuration.
+
+**Known project files:**
+- Template: `config/suricata/suricata.yaml.in`
+- Rules: `rules/suricata/suricata.rules`
+- Classification file: `rules/suricata/classification.config`
+
+**Review targets:**
+- Build-time placeholders affecting YAML syntax and filesystem paths.
+- EVE JSON logging configuration.
+- Default rule path and rule-file list.
+- Classification and reference configuration paths.
+- Network variables and packet-capture interface examples.
+
+**Constraints:** Preserve the original template. Do not start live capture, enable inline IPS, or grant additional capabilities. Do not assume that a template becomes runtime-valid merely by replacing placeholder strings.
+
+**Next action:** Inspect the exact relevant sections and use the results to determine a minimal configuration-generation strategy.
+
+**Status:** Downloaded rules inspected; runtime configuration preparation pending.
+
+
+### Suricata Runtime Configuration Strategy — 11 October 2026
+
+**Inspection findings:**
+- The template declares `suricata-version: "@MAJOR_MINOR@"`.
+- The default log directory and EVE JSON enabled setting contain build-time placeholders.
+- Plugin entries also contain build-time placeholders.
+- The rules section expects `suricata.rules`.
+- Classification and reference paths contain build-time placeholders.
+- The container provides `/usr/share/suricata/classification.config` and `/usr/share/suricata/reference.config`.
+
+**Decision:** Prepare a project-owned runtime configuration using explicit, valid paths for logs, rules, classification, and reference files. Enable EVE JSON logging for future event analysis. Preserve the original template unchanged and avoid indiscriminate placeholder substitution.
+
+**Validation plan:** Use the Suricata 8.0.4 binary's configuration-test mode (`-T`) before processing any traffic. Keep live capture, inline IPS, host networking, and additional capabilities disabled.
+
+**Status:** Required configuration sections inspected; runtime configuration generation and validation pending.
+
+### Project-Owned Suricata Runtime Configuration Created — 11 October 2026
+
+**Objective:** Generate a runtime configuration separate from the original OISF template.
+
+**Planned configuration:**
+- Preserve `config/suricata/suricata.yaml.in` unchanged.
+- Create `config/suricata/suricata.yaml`.
+- Configure explicit log, rules, classification, and reference paths.
+- Enable EVE JSON output for later event inspection.
+- Keep live capture and inline IPS disabled during initial validation.
+
+**Validation:** Inspect the generated configuration and its changes before running Suricata's configuration-test mode.
+
+**Safety:** Do not enable additional capabilities, host networking, or prevention actions. Do not modify existing Docker resources.
+
+**Status:** Runtime configuration generation planned; validation pending.
+### Candidate Suricata Runtime Configuration Generated — 11 October 2026
+
+**File created:** `config/suricata/suricata.yaml`
+
+**Generation result:**
+- File size: 93,427 bytes.
+- Unresolved placeholder scan: none found.
+- Original template retained separately at `config/suricata/suricata.yaml.in`.
+- The generated configuration has not yet passed Suricata's configuration-test mode.
+
+**Important validation targets:**
+- Effective rule directory and `suricata.rules` entry.
+- Classification and reference configuration paths.
+- EVE JSON enabled setting and output filename.
+- Plugin entries after placeholder substitution.
+- Any settings that may attempt live capture during startup.
+
+**Decision:** Inspect these settings before running the configuration test. Do not treat placeholder removal as proof of YAML validity or runtime compatibility.
+
+**Status:** Candidate generated; configuration inspection and validation pending.
+
+### Candidate Runtime Configuration Inspection — 11 October 2026
+
+**Verified settings:**
+- Runtime configuration: `config/suricata/suricata.yaml`.
+- `suricata-version`: `8.0`.
+- Default log directory: `/var/log/suricata`.
+- EVE JSON output: enabled, filename `eve.json`.
+- Default rule path: `/rules`.
+- Rule file: `suricata.rules`.
+- Classification file: `/rules/classification.config`.
+- Reference file: `/usr/share/suricata/reference.config`.
+- Required project-local rules and classification files exist.
+
+**Plugin review:** The PF_RING, Napatech, and nDPI plugin entries are commented out after substitution.
+
+**Remaining concern:** The configuration includes multiple capture-engine sections. Their presence is not proof that live capture will start, but startup and test mode must be handled explicitly.
+
+**Decision:** Before configuration validation, inspect the relevant capture-engine settings and determine a safe test invocation. Do not start a live sensor or enable inline prevention.
+
+**Status:** Core paths and EVE settings verified; configuration-test invocation not yet run.
+
+### Suricata Capture-Engine Configuration Inspection — 11 October 2026
+
+**Configuration reviewed:** `config/suricata/suricata.yaml`
+
+**Findings:**
+- AF_PACKET defines `eth0` and a default interface.
+- PCAP defines `eth0` and a default interface.
+- The DPDK section contains example PCI hardware address `0000:3b:00.0`.
+- PF_RING defines `eth0`.
+- Napatech contains example stream settings.
+- The configuration also includes PCAP-file processing settings.
+- The project rules file contains 69,105 lines and occupies 45,892,735 bytes.
+
+**Interpretation:** Capture-engine interface definitions in a configuration file do not, by themselves, establish which run mode will be used. The DPDK hardware address and other environment-dependent settings require compatibility validation.
+
+**Safety constraint:** The next validation must use Suricata's configuration-test mode (`-T`) inside the selected container, without host networking, elevated privileges, or intentional live packet capture.
+
+**Status:** Inspection complete; configuration validation pending.
+
+### Suricata Configuration Test Passed — 11 October 2026
+
+**Test environment:**
+- Container image: `openeuler/suricata:8.0.4-oe2403sp4`
+- Suricata version: `8.0.4 RELEASE`
+- Configuration: `config/suricata/suricata.yaml`
+- Rules directory: `rules/suricata/`
+- Test mode: `-T`
+- Command configuration path: `/etc/suricata/suricata.yaml`
+
+**Result:** Suricata successfully loaded the candidate configuration and exited normally.
+
+**Safety:** The test used an isolated container without host networking or additional capabilities. Configuration and rules were mounted read-only.
+
+**Limitations:** This result establishes configuration-load success only. It does not establish live-capture readiness, attack-detection accuracy, or prevention effectiveness.
+
+**Decision:** Preserve the validated configuration as the current candidate. Next, inspect the generated runtime logs and confirm the rule-loading details before conducting controlled detection experiments.
+
+**Status:** Configuration test passed; detection testing not yet performed.
+
+### Suricata Rule Paths and Runtime Log Inspection — 11 October 2026
+
+**Configuration findings:**
+- Default rule path: `/rules`.
+- Configured rule file: `suricata.rules`.
+- Classification file: `/rules/classification.config`.
+- Reference file: `/usr/share/suricata/reference.config`.
+- EVE JSON logging is enabled with filename `eve.json`.
+
+**Ruleset inventory:**
+- Total rule-file lines: 69,105.
+- Lines beginning with an active `alert`, `drop`, `reject`, or `pass` action: 53,149.
+
+**Runtime files observed:**
+- `logs/suricata/eve.json`: 0 bytes.
+- `logs/suricata/suricata.log`: 1,381 bytes.
+- `logs/suricata/stats.log`: 0 bytes.
+- `logs/suricata/fast.log`: 0 bytes.
+
+**Interpretation:** An empty EVE file is consistent with a configuration-only test that processed no traffic. Rule-file counts are inventory figures, not proof of successful rule loading.
+
+**Decision:** Inspect `suricata.log` to establish the rule-loading result and identify any warnings before conducting detection experiments.
+
+**Status:** Paths and log files inspected; actual rule-loading details pending.
+
+### Suricata Rule-Loading Validation Passed — 11 October 2026
+
+**Environment:** Suricata 8.0.4 RELEASE in Docker, running configuration-test mode.
+
+**Verified results from `logs/suricata/suricata.log`:**
+- Rule files processed: 1.
+- Rules successfully loaded: 53,149.
+- Rules failed: 0.
+- Rules skipped: 0.
+- Signatures processed: 53,154.
+- IP-only rules: 1,216.
+- Signatures inspecting packet payload: 4,543.
+- Signatures inspecting the application layer: 47,159.
+- Decoder-event-only signatures: 110.
+- Threshold configuration parsed successfully, with 0 rules found.
+- Suricata reported that the configuration loaded successfully and exited normally.
+- Engine mode was reported as IDS mode by default.
+
+**Interpretation:** The candidate configuration and configured ruleset passed Suricata's configuration test. The five-signature difference between successfully loaded rules and processed signatures is reported by Suricata itself; it should not be interpreted as five failed rules.
+
+**Limitations:** No traffic was processed, so detection effectiveness, EVE alert generation, and live-capture readiness remain unverified. The zero-rule threshold configuration is an observation, not evidence of a failure.
+
+**Decision:** Proceed to a controlled, offline PCAP detection experiment before considering live traffic capture. Keep inline prevention disabled.
+
+**Status:** Configuration and ruleset validation passed; detection experiment pending.
+
+### Suricata Offline Detection Test Plan — 11 October 2026
+
+**Prerequisites verified:**
+- Suricata 8.0.4 is available in Docker.
+- Candidate configuration passes `-T` validation.
+- All 53,149 configured rules load successfully; zero failed and zero skipped.
+- EVE JSON output is enabled.
+- The project-local runtime log directory is `logs/suricata/`.
+
+**Experiment objective:** Verify that Suricata can process a controlled PCAP offline, apply its configured detection rules, and write the resulting events to EVE JSON.
+
+**Test boundaries:**
+- Use a small, locally generated or otherwise authorized PCAP.
+- Process the file in offline mode; do not capture live interfaces.
+- Do not use host networking, elevated container privileges, or inline prevention.
+- Preserve the original runtime configuration and ruleset.
+- Record the PCAP provenance, Suricata command, exit status, event counts, and relevant log messages.
+
+**Success criteria:**
+1. Suricata completes offline packet processing.
+2. The EVE JSON output is valid JSON, if events are written.
+3. Any generated alerts are attributable to the test traffic and loaded rules.
+4. A lack of alerts is reported accurately and is not treated as proof that detection is broken.
+
+**Limitations:** Configuration validation alone does not establish detection effectiveness. This experiment is a functional smoke test, not a comprehensive accuracy or performance evaluation.
+
+**Status:** Offline detection experiment planned; PCAP generation and execution pending.
+
+### Synthetic Benign PCAP Preparation — 11 October 2026
+
+**Objective:** Create a minimal, locally generated packet capture for the first offline Suricata processing test.
+
+**Planned traffic:** Synthetic Ethernet, IPv4, UDP, and DNS packets representing a benign DNS query and response.
+
+**Isolation:** Packet bytes will be generated locally and written to a PCAP file. No packets will be transmitted, and no live network interface will be opened.
+
+**Test constraints:**
+- Use a dedicated test directory under `data/`.
+- Do not modify the candidate Suricata configuration or rules.
+- Do not use live capture, host networking, elevated container privileges, or inline prevention.
+- Verify the PCAP file and its packet count before processing it with Suricata.
+
+**Success criteria:** A valid, readable PCAP containing the intended synthetic packets is available for offline testing.
+
+**Limitations:** This benign capture tests packet processing and logging infrastructure. It does not demonstrate attack detection or prevention effectiveness.
+
+**Status:** PCAP generation planned; file creation and validation pending.
+
+### Synthetic DNS PCAP Created — 11 October 2026
+
+**Artifact:** `data/suricata-test/benign-dns.pcap`
+
+**Verification results:**
+- File type: classic PCAP, version 2.4.
+- Link type: Ethernet.
+- Packet count reported by the generator: 2.
+- File size: 214 bytes.
+- SHA-256: `3cd346f634f3da468a97db566d2220bdcaadf32b586c6befd6a9c7cdb1d97c17`.
+
+**Traffic description:** The generated capture contains a synthetic DNS query and response involving documentation-only IPv4 addresses in `192.0.2.0/24`.
+
+**Safety:** Packets were written directly to a file. No network transmission or live capture was performed.
+
+**Limitations:** File identification and checksum do not independently verify every protocol field. Suricata's offline processing will provide the next functional check.
+
+**Status:** PCAP file created and identified; offline processing pending.
+
+### Suricata Offline PCAP Smoke Test Passed — 11 October 2026
+
+**Environment:** Suricata 8.0.4 in Docker, processing a local PCAP in offline mode.
+
+**Input:** `data/suricata-test/benign-dns.pcap`
+
+**Observed results:**
+- PCAP files read: 1.
+- Packets processed: 2.
+- Packet bytes reported by Suricata: 158.
+- EVE JSON output size: 9,888 bytes.
+- DNS events: 2.
+- Flow events: 1.
+- Statistics events: 1.
+- Invalid JSON lines: 0.
+- Total valid EVE events: 4.
+
+**Interpretation:** Suricata successfully processed the synthetic capture, decoded both DNS packets, and emitted valid EVE JSON. This verifies basic offline packet processing and event logging.
+
+**Limitations:** This was a benign smoke test, not an attack-detection test. No alert was observed in the event-type summary, but this summary alone does not establish whether every rule was eligible to match the synthetic traffic. The test does not establish live-capture readiness or prevention effectiveness.
+
+**Decision:** Preserve this test as a functional baseline. The next experiment should use a controlled, locally generated detection test to verify alert generation before integrating Suricata events with the machine-learning component.
+
+**Status:** Offline processing and EVE JSON validation passed; controlled alert test pending.
+
+### Controlled Suricata Alert-Test Plan — 11 October 2026
+
+**Objective:** Verify that Suricata can match a deliberately selected test signature and emit an alert in EVE JSON.
+
+**Existing baseline:**
+- Configuration-test mode passed.
+- 53,149 rules loaded; zero failed and zero skipped.
+- The synthetic benign DNS PCAP processed successfully.
+- Four valid EVE events were emitted: two DNS, one flow, and one statistics event.
+- No alert was established by the previous event-type summary.
+
+**Planned method:**
+1. Inspect the current rule syntax and EVE alert-output configuration.
+2. Create a separate temporary test rule with a unique signature ID.
+3. Generate a small, locally constructed packet matching that rule.
+4. Run Suricata offline against the packet using the temporary rule in an isolated test configuration.
+5. Confirm the expected signature ID and alert event in valid EVE JSON.
+
+**Safety constraints:**
+- Do not edit or replace the production candidate ruleset.
+- Do not transmit packets or capture live interfaces.
+- Keep IDS mode and inline prevention disabled.
+- Keep the test isolated from existing Docker services.
+
+**Success criteria:** The expected test signature appears in an EVE `alert` event, and the event JSON parses successfully.
+
+**Limitations:** A successful synthetic signature test validates the alert pipeline, not the detection accuracy of the full ruleset against real attacks.
+
+**Status:** Alert-generation test planned; execution pending.
+
+### Suricata Alert-Output Configuration Inspection — 11 October 2026
+
+**Configuration reviewed:** `config/suricata/suricata.yaml`
+
+**Findings:**
+- EVE JSON logging is enabled.
+- The EVE `types` list includes an `alert` event configuration.
+- DNS, HTTP, and other protocol-specific event logging sections are present.
+- The project rules directory currently contains `.gitkeep`, `classification.config`, and `suricata.rules`.
+- Existing rules use Suricata signature syntax with fields such as `msg`, `sid`, and `rev`.
+
+**Interpretation:** The configuration contains an EVE alert-output section, but the previous benign PCAP test did not establish that a signature match produces an alert event.
+
+**Decision:** Use a dedicated temporary configuration and test rule for the next experiment. Do not edit the main ruleset or enable prevention.
+
+**Status:** Alert-output configuration inspected; controlled alert test pending.
+
+### Isolated Suricata Alert-Test Workspace Plan — 11 October 2026
+
+**Objective:** Prepare a disposable workspace for verifying Suricata alert generation with a dedicated synthetic signature.
+
+**Workspace:** `data/suricata-test/`
+
+**Planned test artifacts:**
+- A copy of the validated runtime configuration.
+- A dedicated test-rule file containing one unique signature.
+- The existing benign PCAP as a reference input.
+- Separate output logs for the alert test.
+
+**Isolation requirements:**
+- Do not modify `config/suricata/suricata.yaml`.
+- Do not modify `rules/suricata/suricata.rules`.
+- Keep the test rule separate from the downloaded ruleset.
+- Use offline PCAP processing only.
+- Keep inline prevention disabled.
+- Preserve the existing test artifacts.
+
+**Validation sequence:** Prepare the isolated configuration, confirm the intended rule and EVE output paths, then test the signature against a purpose-built local PCAP.
+
+**Limitations:** Creating the workspace alone does not demonstrate alert generation. That requires a subsequent execution and inspection of EVE JSON.
+
+**Status:** Workspace plan documented; isolated configuration preparation pending.
+
+### Isolated Suricata Alert-Test Workspace Created — 11 October 2026
+
+**Workspace:** `data/suricata-test/`
+
+**Verified artifacts:**
+- `alert-test.yaml` created at 93,427 bytes.
+- `benign-dns.pcap` retained at 214 bytes.
+- `alert-rules/` directory created for the dedicated test signature.
+- `alert-logs/` directory created for separate test output.
+
+**Integrity checks:**
+- SHA-256 of `config/suricata/suricata.yaml` and `data/suricata-test/alert-test.yaml` matches: `2295828355619be27e7a70746e1a33bfa3c9e3ad859439abf100a4b65bb24779`.
+- Main ruleset SHA-256: `ba7d40a9b1492f6580c0bfca1566b367de7754f78a81b2f210e24851a12c8ea5`.
+
+**Current test configuration paths:** The copied configuration still points to `/rules/suricata.rules` and `/var/log/suricata`. These paths must be adjusted in the isolated copy before the alert test.
+
+**Decision:** Configure the isolated copy to load only the dedicated test rule and write logs to its dedicated output directory. Preserve the main configuration and ruleset.
+
+**Status:** Workspace integrity verified; isolated path changes pending.
+
+### Isolated Alert-Test Configuration Path Plan — 11 October 2026
+
+**Target file:** `data/suricata-test/alert-test.yaml`
+
+**Planned changes to the isolated copy only:**
+1. Set `default-log-dir` to `/var/log/suricata-test`.
+2. Set `default-rule-path` to `/test-rules`.
+3. Replace the configured `suricata.rules` entry with a dedicated test-rule filename, `alert-test.rules`.
+4. Point `classification-file` to the existing classification configuration available in the container, unless validation shows a different path is required.
+
+**Container mounts planned for the experiment:**
+- `data/suricata-test/alert-test.yaml` mounted read-only as the test configuration.
+- `data/suricata-test/alert-rules/` mounted read-only as `/test-rules`.
+- `data/suricata-test/alert-logs/` mounted as `/var/log/suricata-test`.
+- The synthetic PCAP mounted read-only.
+
+**Safety constraints:** No modifications to the main configuration or main ruleset; no live capture, host networking, additional capabilities, or inline prevention.
+
+**Validation:** Inspect the exact resulting paths before running a configuration test.
+
+**Status:** Planned; isolated configuration has not yet been edited.
+
+### Isolated Alert-Test Configuration Updated — 11 October 2026
+
+**Target:** `data/suricata-test/alert-test.yaml`
+
+**Verified changes:**
+- Log directory: `/var/log/suricata-test`.
+- Default rule directory: `/test-rules`.
+- Rule filename: `alert-test.rules`.
+- Classification file: `/usr/share/suricata/classification.config`.
+
+**Integrity verification:**
+- Main configuration SHA-256 remains `2295828355619be27e7a70746e1a33bfa3c9e3ad859439abf100a4b65bb24779`.
+- Isolated configuration SHA-256 is `ea4857de495036eba3eb7cb53155e597c5a8ea1d57c3273cc3757072d55f964e`.
+
+**Interpretation:** The isolated configuration has the intended rule and logging paths. The main configuration remains unchanged.
+
+**Caveat:** The isolated configuration has not yet been tested with its dedicated rule file. The classification-file path must also be confirmed against the container image before validation.
+
+**Status:** Isolated path changes verified; dedicated rule creation and configuration validation pending.
+
+### Dedicated Suricata Test Signature Plan — 11 October 2026
+
+**Objective:** Prepare a single synthetic signature to verify the alert-generation pipeline.
+
+**Test configuration:** `data/suricata-test/alert-test.yaml`
+
+**Dedicated rule location:** `data/suricata-test/alert-rules/alert-test.rules`
+
+**Planned signature properties:**
+- A unique local-test signature ID.
+- Alert action only; no `drop` or `reject` action.
+- A narrowly scoped match against synthetic test traffic.
+- A descriptive message identifying the experiment.
+
+**Supporting configuration:** Confirm that the container provides the configured classification file before validation.
+
+**Safety constraints:**
+- Do not edit `rules/suricata/suricata.rules`.
+- Do not enable inline prevention or live capture.
+- Use offline processing and a separate EVE log directory.
+- Do not interpret a successful synthetic signature match as proof of general attack-detection accuracy.
+
+**Status:** Test signature design documented; supporting-file verification and rule creation pending.
+
+### Dedicated Suricata Test Rule Created — 11 October 2026
+
+**Supporting files verified inside the container:**
+- `/usr/share/suricata/classification.config` exists.
+- `/usr/share/suricata/reference.config` exists.
+
+**Test rule:** `data/suricata-test/alert-rules/alert-test.rules`
+
+**Signature details:**
+- Action: `alert`.
+- Protocol: UDP.
+- Source: `192.0.2.10:53000`.
+- Destination: `192.0.2.53:53`.
+- Match: first four UDP payload bytes are `12 34 01 00`.
+- Signature ID: `9900001`.
+- Revision: `1`.
+
+**Integrity check:** Main ruleset SHA-256 remains `ba7d40a9b1492f6580c0bfca1566b367de7754f78a81b2f210e24851a12c8ea5`.
+
+**Interpretation:** The dedicated rule targets the synthetic DNS query and uses an alert-only action. Its successful creation does not yet establish that Suricata accepts or matches it.
+
+**Status:** Supporting files verified and test rule created; isolated configuration validation pending.
+
+### Isolated Suricata Configuration Test Passed — 11 October 2026
+
+**Test configuration:** `data/suricata-test/alert-test.yaml`
+
+**Test rule:** `data/suricata-test/alert-rules/alert-test.rules`
+
+**Observed result:**
+- Suricata version: 8.0.4 RELEASE.
+- Configuration-test mode reported: `Configuration provided was successfully loaded. Exiting.`
+- Test signature ID: `9900001`.
+- Isolated configuration SHA-256: `ea4857de495036eba3eb7cb53155e597c5a8ea1d57c3273cc3757072d55f964e`.
+
+**Limitation:** The captured terminal output does not show the detailed signature-loading count. Successful configuration loading alone does not confirm that the intended signature matched any packet.
+
+**Decision:** Inspect the isolated test log for the rule-loading count and any errors before running the offline alert experiment.
+
+**Status:** Configuration test passed; explicit signature-load verification pending.
+
+### Isolated Signature-Load Verification — 11 October 2026
+
+**Observed results:**
+- Suricata configuration-test exit status: `0`.
+- Suricata reported that the configuration loaded successfully.
+- The captured output did not include a rule-loading summary.
+- Successful configuration loading alone does not prove that signature `9900001` was loaded.
+
+**Decision:** Inspect the test configuration's rule filename and the exact contents of the mounted rule file before proceeding. Do not interpret missing
+
+### Isolated Rule Path Verification — 11 October 2026
+
+**Verified:**
+- Rule directory: `/test-rules`.
+- Configured rule filename: `alert-test.rules`.
+- Local test rule exists and is 148 bytes.
+- Signature ID: `9900001`.
+- Classification file is readable inside the Suricata container.
+- Reference configuration path: `/usr/share/suricata/reference.config`.
+
+**Unresolved:** The previous configuration-test output reported successful configuration loading but did not expose the detailed rule-loading count.
+
+**Decision:** Capture the next test's complete stdout and stderr, including the process exit status, so we can distinguish successful configuration parsing from successful signature loading.
+
+**Status:** Rule paths verified; explicit signature-load count pending.
+
+### Suricata Test Signature Loading — Diagnostic Still Required — 11 October 2026
+
+**Observed:**
+- Configuration-test exit status: `0`.
+- Suricata reports that the configuration loaded successfully.
+- Captured output does not include the expected rule-loading count.
+- The isolated rule file exists, uses signature ID `9900001`, and is referenced by the isolated configuration.
+- The classification file is readable in the container.
+
+**Interpretation:** Configuration-test success is established, but explicit evidence of the test signature being loaded is still missing. The output alone does not establish whether the rule matched or whether an alert was generated.
+
+**Decision:** Avoid repeating the same command without improving observability. Inspect the isolated test logs and use a dedicated offline alert run to verify the expected signature ID in EVE JSON.
+
+**Status:** Configuration accepted; signature loading and alert generation remain to be verified.
+
+
+### Isolated Test Signature Load Confirmed — 11 October 2026
+
+**Evidence source:** `data/suricata-test/alert-logs/suricata.log`
+
+**Verified results:**
+- Rule files processed: 1.
+- Rules successfully loaded: 1.
+- Rules failed: 0.
+- Rules skipped: 0.
+- Signatures processed: 1.
+- Configuration test completed successfully.
+
+**Test signature:** SID `9900001`, message `LOCAL TEST Synthetic DNS Query`.
+
+**Interpretation:** Suricata successfully loaded the dedicated test signature. The empty EVE JSON file is consistent with configuration-test mode, which does not process the PCAP.
+
+**Limitations:** Signature loading does not prove that the rule matches traffic or produces an alert.
+
+**Decision:** Run the isolated configuration against the synthetic DNS PCAP in offline mode, then verify the EVE alert's signature ID.
+
+**Status:** Signature loading verified; offline alert-generation test pending.
+
+### Suricata Synthetic Alert Generation Passed — 11 October 2026
+
+**Environment:** Suricata 8.0.4 in Docker, processing a local PCAP offline.
+
+**Input:** `data/suricata-test/benign-dns.pcap`
+
+**Rule:** `data/suricata-test/alert-rules/alert-test.rules`
+
+**Observed results:**
+- PCAP files processed: 1.
+- Packets processed: 2.
+- Packet bytes reported by Suricata: 158.
+- Dedicated test rules loaded: 1.
+- Rules failed: 0.
+- Rules skipped: 0.
+- EVE alert events: at least 1.
+- Expected signature ID `9900001`: matched.
+- Signature message: `LOCAL TEST Synthetic DNS Query`.
+- Source IP: `192.0.2.10`.
+- Destination IP: `192.0.2.53`.
+- Invalid EVE JSON lines: 0.
+
+**Interpretation:** The test verifies that Suricata can process the synthetic capture, match a dedicated alert-only rule, and emit an alert in valid EVE JSON. The alert pipeline works in this controlled offline scenario.
+
+**Limitations:** This synthetic test does not measure detection accuracy against real attacks, validate live network capture, or demonstrate prevention effectiveness. The temporary signature is a test fixture, not an attack-detection rule.
+
+**Decision:** Preserve this result as the Suricata alert-pipeline baseline. Next, inspect the resulting EVE event fields and plan a controlled test using an existing, relevant Suricata signature before considering live traffic.
+
+**Status:** Synthetic offline alert test passed; broader detection validation pending.
+
+### Suricata EVE Alert Schema Inspection — 11 October 2026
+
+**Evidence source:** `data/suricata-test/alert-logs/eve.json`
+
+**Observed alert fields:**
+
+| Field | Observed value |
+|---|---|
+| `event_type` | `alert` |
+| `timestamp` | `2026-10-11T17:50:00.000000+0000` |
+| `src_ip` | `192.0.2.10` |
+| `src_port` | `53000` |
+| `dest_ip` | `192.0.2.53` |
+| `dest_port` | `53` |
+| `proto` | `UDP` |
+| `app_proto` | `dns` |
+| `alert.signature_id` | `9900001` |
+| `alert.signature` | `LOCAL TEST Synthetic DNS Query` |
+| `alert.action` | `allowed` |
+| `flow_id` | `1461331347` |
+| `pcap_cnt` | `1` |
+| `pkt_src` | `wire/pcap` |
+
+**Flow metadata:** The event also contains packet and byte counters for the client-to-server and server-to-client directions.
+
+**Interpretation:** EVE provides useful event metadata for alert correlation, logging, and downstream analysis. The observed `allowed` action is consistent with alert-only IDS behavior.
+
+**ML integration constraint:** These event fields are not equivalent to the existing model's 77 CIC-IDS2017 features. Any adapter must define explicit feature mappings and handle unavailable features without inventing values.
+
+**Limitations:** This event was generated by a synthetic test signature against a synthetic PCAP. It does not establish attack-detection accuracy or live-capture behavior.
+
+**Status:** EVE alert schema inspected; integration design pending.
+
+### Built-In Suricata Signature Selection Plan — 11 October 2026
+
+**Objective:** Select a suitable existing Suricata signature for a controlled offline detection experiment.
+
+**Current baseline:**
+- Suricata 8.0.4 configuration test passed.
+- The main ruleset loaded 53,149 rules successfully.
+- A dedicated synthetic signature generated an EVE alert with SID `9900001`.
+- EVE JSON parsing succeeded with no invalid lines.
+- The observed test alert had action `allowed`, consistent with alert-only IDS behavior.
+
+**Planned selection criteria:**
+1. The signature must exist in the downloaded ruleset and be enabled.
+2. Its matching conditions must be understood before creating test traffic.
+3. The test should use locally generated or otherwise authorized offline PCAP data.
+4. The test must not depend on live capture, external targets, or inline prevention.
+5. The result must identify the actual signature ID and alert event, if any.
+
+**Limitations:** A synthetic rule match validates the alert pipeline, not the detection accuracy of the downloaded ruleset. A built-in rule should not be selected merely because its name sounds relevant; its full matching conditions must be inspected.
+
+**Status:** Selection criteria documented; candidate signature inspection pending.
+
+### Built-In Suricata Rule Inventory — 11 October 2026
+
+**Objective:** Identify and inspect an enabled signature from the downloaded Suricata ruleset before designing an offline detection test.
+
+**Ruleset location:** `rules/suricata/suricata.rules`
+
+**Inspection procedure:**
+1. Search the ruleset for candidate alert signatures.
+2. Read each candidate's complete rule definition, including protocol, source and destination constraints, content matches, SID, and revision.
+3. Confirm the candidate is enabled and determine what traffic would satisfy its matching conditions.
+4. Select a candidate only after its conditions are understood.
+
+**Safety constraints:** This stage is read-only. Do not modify the production ruleset, generate traffic, enable live capture, or activate packet blocking.
+
+**Evidence limitation:** Finding a signature in the ruleset does not demonstrate that it detects an attack. Detection must be evaluated separately using a controlled, matching test input.
+
+**Status:** Inspection plan recorded; candidate selection pending.
+
+### Built-In DNS Signature Candidate Identified — 11 October 2026
+
+**Candidate:** ET Open DNS signature, SID `2034819`.
+
+**Signature message:** `ET ATTACK_RESPONSE DNS Query for Observed CVE-2021-44228 Security Scanner Domain (log4j .binaryedge .io)`
+
+**Observed matching conditions:**
+- DNS application protocol.
+- Source address must match `$HOME_NET`.
+- DNS query inspection using `dns.query`.
+- A dot-prefixed, case-insensitive domain suffix match for `.log4j.binaryedge.io`.
+- The rule uses the `alert` action.
+
+**Why it is a candidate:** A synthetic DNS query can be generated for an isolated offline PCAP test without contacting the named domain or attempting exploitation.
+
+**Checks still required:**
+1. Inspect the complete rule and confirm its SID and revision.
+2. Account for the configured `$HOME_NET` when constructing the test packet.
+3. Determine whether the offline test produces the expected EVE alert.
+
+**Safety and evidence limitations:** No external DNS request or exploit attempt is planned. A successful signature match would validate this specific detection condition, not Log4Shell exploitation detection in general.
+
+**Status:** Candidate identified; detailed inspection pending.
+
+### Built-In DNS Signature Conditions Verified — 11 October 2026
+
+**Verified candidate:** SID `2034819`, revision `1`.
+
+**Rule conditions confirmed:** The signature inspects DNS queries from `$HOME_NET` and matches the case-insensitive suffix `.log4j.binaryedge.io`, with `dotprefix` and `endswith` modifiers. Its action is `alert`.
+
+**Test-design consequence:** The existing synthetic PCAP uses source address `192.0.2.10`, outside the configured `$HOME_NET`. It is therefore unsuitable for directly testing this rule.
+
+**Next test design:** Create a separate, locally generated DNS PCAP using a synthetic query such as `probe.log4j.binaryedge.io` and a source address within the configured HOME_NET. Process the PCAP offline and inspect EVE JSON for SID `2034819`.
+
+**Safety constraints:** Do not contact the named domain, send DNS queries onto a network, modify the main ruleset, or enable live capture.
+
+**Status:** Candidate rule verified; dedicated synthetic test preparation pending.
+
+### Synthetic DNS Packet Generation Readiness — 11 October 2026
+
+**Objective:** Prepare an isolated PCAP to test built-in Suricata DNS signature SID `2034819`.
+
+**Preflight result:** Python standard-library imports `socket` and `struct` succeeded in the project's virtual environment.
+
+**Planned test input:**
+- DNS query name: `probe.log4j.binaryedge.io`.
+- Synthetic source address: within the configured `192.168.0.0/16` HOME_NET.
+- Destination: a synthetic DNS server address; no DNS request will be transmitted.
+- Output: a separate PCAP under `data/suricata-test/`.
+- Validation: inspect the PCAP and process it offline with the isolated Suricata test configuration.
+
+**Preservation constraints:** Keep the existing `benign-dns.pcap`, main runtime configuration, downloaded ruleset, and previous alert-test artifacts unchanged.
+
+**Status:** Packet-generation prerequisites verified; PCAP creation pending.
+
+### Dedicated DNS Signature-Test PCAP Created — 11 October 2026
+
+**Output file:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Reported creation result:**
+- File size: 238 bytes.
+- Packet count: 2.
+- Query name: `probe.log4j.binaryedge.io`.
+- Synthetic client: `192.168.56.10:53001`.
+- Synthetic DNS server: `192.168.56.53:53`.
+
+**Intended purpose:** Offline testing of Suricata SID `2034819`, which matches a specific DNS query suffix.
+
+**Verification still required:** Confirm the PCAP header, packet records, DNS query contents, and packet lengths before processing it with Suricata. The pasted terminal output was partially interleaved, so successful file creation alone is not sufficient validation.
+
+**Safety:** The file is intended for offline processing only; no DNS traffic was transmitted.
+
+**Status:** File creation reported successful; integrity verification pending.
+
+### Synthetic DNS PCAP Integrity Check Failed — 11 October 2026
+
+**Test file:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Observed result:** The integrity checker stopped with `AssertionError: Not Ethernet IPv4`.
+
+**Likely cause:** Review of the packet-generation code shows that the Ethernet header was constructed from the destination and source MAC addresses without appending the IPv4 EtherType field (`08 00`). This makes the frame layout inconsistent with the checker’s expected Ethernet/IPv4 structure.
+
+**Impact:** The PCAP has not passed integrity validation. No Suricata detection result should be inferred from it.
+
+**Corrective plan:** Repair the packet-generation code, regenerate the dedicated PCAP, and rerun the integrity checks. Preserve the existing benign PCAP, main configuration, and downloaded ruleset.
+
+**Status:** Integrity validation failed; packet-builder correction pending.
+
+### Corrected PCAP Generator — Header Validation Still Failing — 11 October 2026
+
+**Test file:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Observed result:** The regenerated PCAP failed the magic-number assertion before packet validation completed.
+
+**Expected header:** A little-endian PCAP file should begin with bytes `d4 c3 b2 a1`.
+
+**Possible causes:** The file may not contain the expected header, or the pasted command may have been altered or interleaved during execution. The actual file bytes must be inspected before selecting a correction.
+
+**Next diagnostic:** Read the file's first 32 bytes and report its size without modifying it.
+
+**Preservation:** Do not delete or modify the existing PCAPs, ruleset, or Suricata configurations during diagnosis.
+
+**Status:** PCAP integrity remains unverified; header inspection pending.
+
+### PCAP Header Bytes Inspected — 11 October 2026
+
+**File:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Observed evidence:**
+- File size: 242 bytes.
+- First four bytes: `d4 c3 b2 a1`, consistent with a little-endian PCAP header.
+- The file's header begins with the expected magic bytes.
+
+**Interpretation:** The earlier magic-number assertion failure cannot be reproduced from the currently observed header bytes. The full PCAP is not yet validated; Ethernet framing, packet lengths, and DNS contents still need independent verification.
+
+**Next step:** Run a minimal read-only check of the PCAP header and the Ethernet EtherType of the first packet.
+
+**Status:** Header magic confirmed; full integrity verification pending.
+
+### PCAP Header and Ethernet Framing Check Passed — 11 October 2026
+
+**File:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Verified values:**
+- PCAP magic: `d4 c3 b2 a1`.
+- PCAP version: `2.4`.
+- Link type: `1` (Ethernet).
+- First packet EtherType: `08 00` (IPv4).
+- First packet IP version: `4` (IPv4).
+
+**Interpretation:** The file header and first packet's Ethernet/IPv4 framing match the expected format.
+
+**Remaining validation:** Verify both packet records, UDP lengths, DNS message structure, and the exact query name `probe.log4j.binaryedge.io`.
+
+**Status:** Header and first-frame checks passed; full packet validation pending.
+
+### Dedicated DNS Signature-Test PCAP Validated — 11 October 2026
+
+**File:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Validation results:**
+- PCAP header and Ethernet link type validated.
+- Exactly two complete packet records found.
+- Both packets have valid Ethernet/IPv4/UDP framing and consistent length fields.
+- Packet 1: `192.168.56.10` → `192.168.56.53`.
+- Packet 2: `192.168.56.53` → `192.168.56.10`.
+- DNS query name: `probe.log4j.binaryedge.io`.
+- File size: 242 bytes.
+
+**Interpretation:** The synthetic PCAP passed the implemented structural checks. The query is designed to satisfy the domain-suffix condition of Suricata SID `2034819`, and its source address is within the configured `$HOME_NET`.
+
+**Next step:** Process the PCAP offline using the isolated Suricata test configuration, then inspect EVE JSON for an alert with SID `2034819`.
+
+**Limitations:** PCAP validation does not prove that Suricata will generate an alert. No live traffic or exploitation is involved.
+
+**Status:** PCAP integrity checks passed; offline signature test pending.
+
+### Built-In DNS Signature Test — Rule-Loading Failure — 11 October 2026
+
+**Test input:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Observed result:** Suricata read one PCAP file containing two packets, but reported that `/test-rules/alert-test.rules` did not match any file and that no rules were loaded.
+
+**Diagnosis:** The Docker command mounted `rules/suricata` at `/test-rules`, while the isolated test signature is stored under `data/suricata-test/alert-rules/alert-test.rules`. The mounted directory therefore does not contain the requested test-rule file.
+
+**Impact:** This run provides no evidence for or against detection by SID `2034819`. The signature was not loaded.
+
+**Corrective plan:** Mount the isolated `alert-rules` directory at `/test-rules`, use the existing isolated test log directory `data/suricata-test/alert-logs`, and rerun the offline PCAP test. Do not modify the main ruleset or runtime configuration.
+
+**Status:** Rule-loading failure diagnosed; corrected offline run pending.
+
+### Isolated Suricata Test Paths Verified — 11 October 2026
+
+**Verification results:**
+- Test rule exists at `data/suricata-test/alert-rules/alert-test.rules`.
+- Isolated configuration sets `default-log-dir` to `/var/log/suricata-test`.
+- Isolated configuration sets `default-rule-path` to `/test-rules`.
+- The configured rule filename is `alert-test.rules`.
+- The isolated log directory `data/suricata-test/alert-logs` exists.
+
+**Root cause confirmed:** The previous Docker command mounted the main downloaded rules directory at `/test-rules`, instead of mounting the directory containing the isolated test rule.
+
+**Corrective action:** Mount `data/suricata-test/alert-rules` at `/test-rules` and `data/suricata-test/alert-logs` at `/var/log/suricata-test`. Keep the isolated configuration and main ruleset unchanged.
+
+**Status:** Correct local paths verified; corrected offline run pending.
+
+### Built-In DNS Signature Test — Run Result Requires Log Verification — 11 October 2026
+
+**Test input:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Observed output:** Suricata 8.0.4 started, stopped, and reported reading one PCAP file with two packets.
+
+**Uncertainty:** The pasted command appears truncated or interleaved around the configuration and log-directory arguments. The terminal output does not establish that the intended isolated configuration was loaded or that SID `2034819` was active.
+
+**Next diagnostic:** Inspect the isolated EVE JSON and Suricata log files to determine whether the candidate rule was loaded and whether an alert with SID `2034819` was generated.
+
+**Interpretation constraint:** A completed PCAP read alone is not evidence of a signature match.
+
+**Status:** Offline processing reported; rule activation and alert result unconfirmed.
+
+### Built-In DNS Test — Candidate Signature Not Yet Loaded — 11 October 2026
+
+**Log inspection results:**
+- The isolated Suricata log records one rule file processed.
+- One rule loaded successfully; zero rules failed or were skipped.
+- No EVE alert with candidate SID `2034819` was found in the inspected output.
+- The isolated test rule file was previously created with synthetic SID `9900001`.
+
+**Interpretation:** The current isolated configuration loads the synthetic test rule, not the built-in candidate signature. Therefore, the absence of SID `2034819` is not evidence that the built-in signature failed to detect the query.
+
+**Next step:** Inspect the isolated rule file and the candidate rule's location in the downloaded ruleset. Then prepare a dedicated test rules file containing only the selected built-in signature, without modifying the main ruleset.
+
+**Safety:** Continue using offline PCAP processing only. Do not contact the named domain or enable live capture.
+
+**Status:** Rule-loading behavior understood; built-in candidate integration pending.
+
+### Built-In DNS Candidate Rule Verified — 11 October 2026
+
+**Isolated test rule:** SID `9900001`, a local synthetic DNS-query signature.
+
+**Built-in candidate:** SID `2034819`, revision `1`, in `rules/suricata/suricata.rules`.
+
+**Candidate message:** `ET ATTACK_RESPONSE DNS Query for Observed CVE-2021-44228 Security Scanner Domain (log4j .binaryedge .io)`.
+
+**Verified facts:**
+- The built-in candidate exists as an active `alert dns` rule in the downloaded ruleset.
+- The isolated test-rule file contains only SID `9900001`.
+- Therefore, the earlier isolated run could not evaluate SID `2034819`.
+
+**Next step:** Create a separate candidate-only rule file containing the exact verified built-in signature. Configure a dedicated offline test to load that file, while preserving both the main ruleset and the existing synthetic test rule.
+
+**Safety:** Use only the synthetic PCAP and offline processing. Do not resolve or contact the named domain.
+
+**Status:** Candidate verified; dedicated rule-file preparation pending.
+
+### Dedicated Built-In Candidate Rule File Created — 11 October 2026
+
+**New file:** `data/suricata-test/alert-rules/builtin-candidate.rules`
+
+**Candidate SID:** `2034819`, revision `1`.
+
+**Reported creation result:**
+- One matching rule extracted from the downloaded ruleset.
+- The candidate was written to a separate test-only file.
+- The main ruleset was not modified.
+- The existing synthetic rule was not modified.
+
+**Verification still required:** Independently confirm that the new file contains exactly one complete rule with SID `2034819` and the expected DNS suffix conditions.
+
+**Next step:** After verification, configure an isolated offline test to load the candidate-only rule file and process the validated synthetic PCAP.
+
+**Status:** Candidate file created; independent verification pending.
+
+### Built-In Candidate Rule File Verified — 11 October 2026
+
+**File:** `data/suricata-test/alert-rules/builtin-candidate.rules`
+
+**Verification results:**
+- Exactly one rule is present.
+- The rule uses the `alert dns` action and protocol.
+- SID `2034819` and revision `1` are correct.
+- DNS query inspection is enabled through `dns.query`.
+- The expected `.log4j.binaryedge.io` suffix is present.
+- `nocase` and `endswith` modifiers are present.
+
+**Interpretation:** The dedicated candidate file contains the intended signature and is ready for isolated configuration testing.
+
+**Next step:** Create a separate candidate-test configuration that points to `/test-rules/builtin-candidate.rules`. Preserve the existing isolated configuration, synthetic test rule, main runtime configuration, and downloaded ruleset.
+
+**Safety:** Continue with offline PCAP processing only. Do not contact the named domain or enable live capture.
+
+**Status:** Candidate rule verified; dedicated configuration preparation pending.
+
+### Dedicated Built-In Candidate-Test Configuration Plan — 11 October 2026
+
+**Objective:** Prepare an isolated Suricata configuration that loads only the verified built-in DNS signature, SID `2034819`.
+
+**Planned configuration:**
+- Source template: `data/suricata-test/alert-test.yaml`.
+- New configuration: `data/suricata-test/builtin-candidate-test.yaml`.
+- Rule path inside the container: `/test-rules`.
+- Rule filename: `builtin-candidate.rules`.
+- Log directory inside the container: `/var/log/suricata-candidate-test`.
+
+**Preservation requirements:**
+- Do not modify the main runtime configuration.
+- Do not modify the existing isolated test configuration.
+- Do not modify either rule file or the downloaded ruleset.
+- Keep the test restricted to offline PCAP processing.
+
+**Next validation:** Confirm the new configuration references the candidate-only rule file and its dedicated log directory, then run Suricata's configuration test before processing the PCAP.
+
+**Status:** Configuration plan recorded; isolated configuration creation pending.
+
+### Dedicated Candidate-Test Configuration Created — 11 October 2026
+
+**New file:** `data/suricata-test/builtin-candidate-test.yaml`
+
+**Reported settings:**
+- Rule filename: `builtin-candidate.rules`.
+- Container log directory: `/var/log/suricata-candidate-test`.
+- Source configuration: `data/suricata-test/alert-test.yaml`.
+
+**Reported result:** The new configuration was created, and the source configuration was preserved.
+
+**Verification still required:** Inspect the saved configuration to confirm the rule path, rule filename, and log directory are correct before running Suricata's configuration test.
+
+**Preservation:** The main runtime configuration, downloaded ruleset, existing isolated configuration, and original synthetic rule must remain unchanged.
+
+**Status:** New configuration created; independent inspection pending.
+
+### Candidate-Test Configuration Paths Verified — 11 October 2026
+
+**Configuration:** `data/suricata-test/builtin-candidate-test.yaml`
+
+**Verified settings:**
+- `default-log-dir`: `/var/log/suricata-candidate-test`
+- `default-rule-path`: `/test-rules`
+- Rule filename: `builtin-candidate.rules`
+- Classification file: `/usr/share/suricata/classification.config`
+- Reference file: `/usr/share/suricata/reference.config`
+
+**Interpretation:** The saved configuration references the intended candidate-only rule file and dedicated log directory. The original isolated test configuration remains separate.
+
+**Next step:** Run Suricata's configuration test using this configuration and mount `data/suricata-test/alert-rules` at `/test-rules`. Confirm that SID `2034819` loads successfully before processing the PCAP.
+
+**Status:** Configuration paths verified; Suricata configuration test pending.
+
+### Candidate-Test Configuration Test Passed — 11 October 2026
+
+**Configuration tested:** `data/suricata-test/builtin-candidate-test.yaml`
+
+**Runtime:** Suricata 8.0.4 in a Docker container.
+
+**Observed result:** Suricata reported `Configuration provided was successfully loaded. Exiting.`
+
+**Interpretation:** The candidate-test configuration is syntactically acceptable to Suricata.
+
+**Remaining verification:** Inspect the dedicated Suricata log to confirm that `builtin-candidate.rules` was processed and SID `2034819` loaded successfully.
+
+**Safety:** This was a configuration-only test using `-T`; no PCAP was processed and no live capture was started.
+
+**Status:** Configuration test passed; candidate rule-loading confirmation pending.
+
+### Candidate Signature Loading — Shared Log Is Ambiguous — 11 October 2026
+
+**Observed evidence:** The shared `data/suricata-test/alert-logs/suricata.log` contains a rule-loading entry at 18:28:50 reporting one rule loaded and zero failed or skipped.
+
+**Limitation:** The directory contains logs from earlier synthetic-rule tests. The shared log alone does not establish that the latest entry belongs to the candidate-only configuration.
+
+**Next step:** Use a fresh, dedicated log directory for the candidate-only configuration test, then verify the new log reports one rule successfully loaded. This will separate candidate-rule evidence from earlier test runs.
+
+**Safety:** Do not delete or overwrite the existing test logs, rules, PCAPs, or configurations. Continue using configuration tests and offline PCAP processing only.
+
+**Status:** Shared log reviewed; candidate-specific rule-loading confirmation pending.
+
+### Dedicated Candidate-Test Log Directory Created — 11 October 2026
+
+**Directory:** `data/suricata-test/candidate-logs/`
+
+**Observed result:** The directory was created successfully and is available for the candidate-only configuration test.
+
+**Purpose:** Separate new candidate-test logs from earlier synthetic-rule tests so rule-loading evidence can be attributed to the correct run.
+
+**Preservation:** Existing logs, rules, PCAPs, and configurations were not intentionally modified by this directory-creation step.
+
+**Next step:** Rerun the candidate-only configuration test with this fresh directory mounted at `/var/log/suricata-candidate-test`, then inspect the new `suricata.log` for the rule-loading count.
+
+**Status:** Dedicated log directory ready; fresh configuration test pending.
+
+### Built-In Candidate Rule Loading Confirmed — 11 October 2026
+
+**Configuration:** `data/suricata-test/builtin-candidate-test.yaml`
+
+**Dedicated logs:** `data/suricata-test/candidate-logs/`
+
+**Observed result from the fresh Suricata log:**
+- Rule files processed: 1.
+- Rules successfully loaded: 1.
+- Rules failed: 0.
+- Rules skipped: 0.
+- Configuration test completed successfully.
+
+**Interpretation:** Suricata loaded one rule from the candidate-test rule directory without reporting load failures. The rule file was independently verified to contain only candidate SID `2034819`, revision `1`.
+
+**Next step:** Run the validated synthetic DNS PCAP through this configuration offline and inspect EVE JSON for SID `2034819`.
+
+**Limitations:** Rule loading alone does not prove that the signature will match the test packet. No live capture or prevention has been tested.
+
+**Status:** Candidate rule loading confirmed; offline detection test pending.
+
+### Built-In DNS Signature Offline Run — 12 October 2026
+
+**Test input:** `data/suricata-test/log4j-signature-test.pcap`
+
+**Candidate signature:** SID `2034819`, revision `1`.
+
+**Observed output:**
+- Suricata 8.0.4 started and stopped.
+- One PCAP file was read.
+- Two packets were processed.
+
+**Verification still required:**
+- Inspect the fresh EVE JSON for an alert with SID `2034819`.
+- Confirm which configuration was loaded for this run. The pasted command does not visibly include the explicit `-c /etc/suricata/suricata.yaml` argument used in the earlier configuration test.
+
+**Interpretation constraint:** Reading the PCAP successfully does not establish that the candidate signature matched. A missing alert must not be interpreted as a detection failure until rule loading and configuration use are confirmed.
+
+**Safety:** Offline PCAP processing only; no live capture or external DNS request.
+
+**Status:** Offline run completed; detection result pending EVE inspection.
+
+### Built-In Suricata DNS Signature Matched — 12 October 2026
+
+**Test objective:** Evaluate the built-in ET Open DNS signature SID `2034819` using a controlled, synthetic offline PCAP.
+
+**Test environment:**
+- Suricata 8.0.4 in Docker.
+- Dedicated candidate-only configuration: `data/suricata-test/builtin-candidate-test.yaml`.
+- Candidate rule file: `data/suricata-test/alert-rules/builtin-candidate.rules`.
+- PCAP: `data/suricata-test/log4j-signature-test.pcap`.
+- EVE output: `data/suricata-test/candidate-logs/eve.json`.
+
+**Observed detection:**
+- SID: `2034819`.
+- Revision: `1`.
+- DNS query: `probe.log4j.binaryedge.io`.
+- Source: `192.168.56.10:53001`.
+- Destination: `192.168.56.53:53`.
+- PCAP packet number: `1`.
+- EVE alert action: `allowed`.
+- EVE event counts: 1 alert, 2 DNS events, 1 flow event, and 1 stats event.
+- Invalid EVE JSON lines: 0.
+
+**Result:** The built-in signature matched the synthetic DNS query and generated an EVE alert. This validates the rule's matching condition and the offline alert-output pipeline.
+
+**Limitations:** This experiment does not demonstrate Log4Shell exploitation, real-world attack detection accuracy, or inline packet prevention. No external DNS request, exploit, or live capture was involved. The EVE action `allowed` is consistent with alert-only IDS behavior.
+
+**Next step:** Summarize the completed Suricata detection-only validation and decide how to integrate Suricata alerts into the project's event pipeline without treating EVE fields as equivalent to the 77 CIC-IDS2017 model features.
+
+**Status:** Built-in signature match confirmed in offline testing.
+
+### Suricata Detection Validation and Integration Plan — 12 October 2026
+
+**Completed validation:**
+- Suricata 8.0.4 runs in Docker.
+- The main configuration test passed.
+- The downloaded ruleset loaded successfully in the main configuration.
+- A synthetic alert rule validated the EVE alert-output pipeline.
+- Built-in ET Open DNS signature SID `2034819` matched the synthetic query `probe.log4j.binaryedge.io` in an offline PCAP.
+- EVE JSON parsing completed with zero invalid lines.
+
+**Current architecture decision:**
+1. Keep Suricata in detection-only mode.
+2. Treat Suricata alerts and ML predictions as separate evidence sources.
+3. Preserve raw EVE events for auditing and reproducibility.
+4. Define an explicit event schema before integrating Suricata output with the ML service.
+5. Do not map EVE fields directly onto the 77 CIC-IDS2017 model features without a validated feature-mapping process.
+6. Do not enable inline prevention until detection quality, false positives, failure handling, and enforcement behavior have been evaluated.
+
+**Next implementation phase:** Inspect the existing project architecture and identify the appropriate location for a Suricata EVE ingestion and normalization component.
+
+**Evidence limitation:** The successful built-in signature test used synthetic offline traffic. It does not establish real-world attack-detection accuracy or prevention effectiveness.
+
+**Status:** Offline signature validation complete; integration design pending.
+
+### Existing Project Structure Inspected — 12 October 2026
+
+**Repository:** `/home/ah076/decentralized-ips`
+
+**Top-level components observed:**
+- `ml/`: model training, preprocessing, and evaluation scripts.
+- `services/`: existing service components requiring further inspection.
+- `blockchain/`: blockchain-related components requiring further inspection.
+- `config/suricata/`: Suricata runtime configuration.
+- `rules/suricata/`: downloaded Suricata rules workspace.
+- `data/suricata-test/`: isolated synthetic PCAPs, candidate rules, and test configurations.
+- `logs/suricata/`: Suricata runtime output.
+- `tests/`: existing test area.
+
+**Architecture decision:** Treat Suricata EVE ingestion as a separate detection-event component. Preserve raw EVE events and normalize them into an explicit event schema. Keep Suricata alerts separate from ML predictions until a validated integration contract exists.
+
+**Next inspection:** Examine the contents of `services/`, `blockchain/`, and `tests/` to identify existing entry points, event-processing conventions, and integration boundaries before selecting an implementation location.
+
+**Preservation constraints:** Do not modify application code, ML models, Suricata configuration, or blockchain components during this inspection.
+
+**Status:** Top-level structure inspected; service integration point not yet identified.
+
+### Service and Integration Boundary Inspection — 12 October 2026
+
+**Inspection method:** Read-only file inventory of `services/`, `blockchain/`, `tests/`, `scripts/`, and `docker/`.
+
+**Findings:**
+- `services/decision-service/` contains only `.gitkeep`.
+- `services/ml-service/` contains only `.gitkeep`.
+- `services/rule-engine/` contains only `.gitkeep`.
+- `services/sync-agent/` contains only `.gitkeep`.
+- `blockchain/chaincode/`, `blockchain/client/`, and `blockchain/network/` contain only `.gitkeep`.
+- `tests/`, `scripts/`, and the inspected Docker subdirectories contain only `.gitkeep`.
+
+**Conclusion:** No existing application service, event-ingestion implementation, API entry point, or test suite was identified in these directories.
+
+**Design implication:** A dedicated Suricata EVE ingestion component may be appropriate, but its interface and location must be chosen after reviewing the README and documented architecture. Avoid adding dependencies or introducing a service framework before establishing the minimum requirements.
+
+**Status:** Service boundaries inspected; implementation design not yet finalized.
+
+### Architecture Documentation Review Plan — 12 October 2026
+
+**Objective:** Determine the intended service responsibilities and integration boundaries before implementing Suricata EVE ingestion.
+
+**Current evidence:**
+- The ML training and evaluation scripts exist under `ml/`.
+- The service directories inspected so far contain only `.gitkeep` placeholders.
+- The blockchain directories inspected so far contain only `.gitkeep` placeholders.
+- Suricata has successfully generated an alert from a synthetic offline PCAP.
+
+**Review scope:**
+1. Read the README for the project's stated architecture, technology choices, and implementation phases.
+2. Identify relevant headings in `docs/research-log.md` concerning service design, event processing, ML inference, and blockchain auditing.
+3. Compare documented intentions with the existing repository structure.
+
+**Decision criteria:** Choose the smallest component that can ingest EVE JSON, preserve raw events, validate and normalize alert records, and be tested independently. Do not assume that blockchain auditing or ML inference must be part of the first implementation.
+
+**Safety constraints:** Documentation inspection only. No source-code changes, dependency installation, live traffic capture, or prevention-mode changes.
+
+**Status:** Architecture review planned; implementation location remains undecided.
+
+### Documented Target Architecture Reviewed — 12 October 2026
+
+**Source reviewed:** `README.md`, sections 1–6 and 10.
+
+**Documented component responsibilities:**
+- **Suricata:** Monitor network traffic and generate security events.
+- **ML service:** Classify supported traffic records and return predictions.
+- **Decision service:** Evaluate predictions and apply decision policies.
+- **Rule engine:** Validate proposed prevention actions.
+- **Blockchain audit layer:** Planned Hyperledger Fabric integration for security-event auditing.
+
+**Current implementation status:** The README identifies this as the planned target architecture, not a fully operational system. The inspected service and blockchain directories contain only placeholders.
+
+**Integration implication:** Suricata EVE events need a defined interface before they can be consumed by another component. EVE alert records must not be treated as equivalent to the existing CIC-IDS2017 model's 77 input features.
+
+**Next step:** Inspect the README's architecture diagram and technology-stack sections to determine the intended data flow and whether the initial EVE adapter should be a standalone module or part of the planned ML service.
+
+**Constraints:** Documentation review only; no code changes, new dependencies, live capture, or prevention-mode changes.
+
+**Status:** Target responsibilities confirmed; exact EVE ingestion boundary still pending.
+
+### Suricata EVE Ingestion Boundary Selected — 12 October 2026
+
+**Basis:** README sections 3, 4, 6, and 10, plus the inspected repository structure.
+
+**Documented target flow:** Suricata → ML service → decision service → validated rule engine → prevention/enforcement. Hyperledger Fabric is planned for auditing selected security events and decisions.
+
+**Initial implementation boundary:** Begin with a small, independently testable Python EVE ingestion and normalization module. Keep it separate from model inference, decision policy, enforcement, and blockchain integration.
+
+**Initial responsibilities:**
+1. Read EVE JSON records from a file.
+2. Parse each JSON record independently.
+3. Identify event type and validate the minimum structure required for normalization.
+4. Preserve the original record for traceability.
+5. Normalize alert fields into an explicit, versioned event schema.
+6. Report malformed records without silently treating them as valid alerts.
+
+**Out of scope:** Live packet capture, inline prevention, rule modification, direct conversion to the 77 CIC-IDS2017 features, automatic ML classification, and blockchain writes.
+
+**Proposed location:** `services/ml-service/` is a candidate because the roadmap explicitly calls for Suricata-to-ML integration. Confirm the module interface and existing dependencies before implementation.
+
+**Validation plan:** Use the already generated offline EVE data, including the synthetic alert and built-in signature test. Verify valid-event parsing, malformed-line handling, preservation of raw fields, and deterministic normalization.
+
+**Status:** Initial component boundary selected for design; implementation has not started.
+
+### Python Dependency and Environment Inspection Plan — 12 October 2026
+
+**Objective:** Identify the existing Python environment and dependency conventions before implementing the Suricata EVE ingestion module.
+
+**Inspection scope:**
+1. Verify the active Python interpreter and version.
+2. Check whether the standard library can support JSON Lines parsing and validation for the initial module.
+3. Inspect existing dependency manifests and relevant ML-service files.
+4. Identify available testing tools without installing anything.
+
+**Initial design preference:** Use Python standard-library facilities for file reading, JSON parsing, schema checks, and error reporting unless repository requirements demonstrate a need for an additional dependency.
+
+**Constraints:** Read-only inspection. Do not install packages, modify dependency manifests, create source files, or alter the ML model.
+
+**Status:** Dependency inspection planned; implementation remains pending.
+
+### Suricata EVE Parser Contract — 12 October 2026
+
+**Runtime:** Python 3.12.3 in the project virtual environment.
+
+**Dependency decision:** Use Python standard-library modules for the initial implementation. No new package installation is required for JSON Lines parsing.
+
+**Proposed module location:** `services/ml-service/eve_ingestion.py`.
+
+**Input contract:**
+- Accept a path to an EVE JSON Lines file.
+- Read one JSON object per non-empty line.
+- Preserve the parsed original event.
+- Handle malformed JSON lines explicitly without silently discarding them.
+
+**Normalized alert contract, schema version 1:**
+- `schema_version`
+- `source` (Suricata)
+- `event_type`
+- `timestamp`
+- `flow_id`
+- `src_ip`, `src_port`
+- `dest_ip`, `dest_port`
+- `protocol`, `app_protocol`
+- `signature_id`, `signature`, `severity`, `category`, `action`
+- `raw_event` (original parsed JSON object)
+
+**Validation rules:**
+1. Normalize only records whose `event_type` is `alert`.
+2. Treat absent optional fields as `null`; do not fabricate values.
+3. Preserve the original event so additional Suricata fields remain available for auditing.
+4. Report malformed JSON with its line number.
+5. Distinguish valid non-alert events from malformed records.
+6. Do not infer that an alert proves an attack succeeded or that traffic was blocked.
+
+**Testing plan:** Cover a valid alert, a valid non-alert event, a malformed JSON line, missing optional fields, and preservation of the raw event.
+
+**Integration boundary:** This module will not invoke the ML model, create prevention rules, or write to Hyperledger Fabric.
+
+**Status:** Parser contract proposed; implementation not yet started.
+
+### Suricata EVE Sample Inspection Plan — 12 October 2026
+
+**Objective:** Verify the proposed normalized-alert schema against the actual EVE JSON output produced during offline testing.
+
+**Input:** Existing file `logs/suricata/eve.json`, generated by the Suricata offline PCAP smoke test.
+
+**Inspection scope:**
+1. Count the event types present in the file.
+2. Inspect the top-level keys of a representative alert, if one exists.
+3. Check the types and presence of timestamp, flow, source/destination, protocol, and alert fields.
+4. Confirm whether the current file contains alerts or only DNS, flow, and statistics events.
+
+**Method:** Read-only Python inspection. Print a compact summary rather than dumping the complete EVE log.
+
+**Constraints:** Do not modify the EVE file, Suricata configuration, rules, or application code. Do not assume that this benign-PCAP output contains an alert; the synthetic alert test used a separate output directory.
+
+**Status:** Sample inspection planned; parser contract will be adjusted only if the observed EVE structure requires it.
+
+### Benign EVE Sample Inspection Results — 12 October 2026
+
+**Input:** `logs/suricata/eve.json`
+
+**Observed event counts:**
+- DNS: 2
+- Flow: 1
+- Statistics: 1
+- Alert: 0
+
+**Parsing result:** Zero invalid JSON records were found in the inspected file.
+
+**Interpretation:** The file represents the benign offline-PCAP smoke test. Its lack of alerts is consistent with that test's purpose and does not contradict the successful alert-generation tests, which used separate output directories.
+
+**Schema limitation:** This file does not provide a representative alert record, so alert-specific field validation must use the dedicated synthetic-alert or built-in-signature EVE output.
+
+**Next step:** Inspect one dedicated alert record and verify its field names and data types before implementing the parser.
+
+**Status:** Benign EVE structure validated; alert schema verification remains pending.
+
+### Dedicated Suricata Alert Schema Inspection Plan — 12 October 2026
+
+**Objective:** Verify the normalized-alert contract against a real Suricata EVE alert generated during the offline signature test.
+
+**Expected input:** `data/suricata-test/candidate-logs/eve.json`, subject to confirming that this is the actual output path used by the successful built-in-signature test.
+
+**Fields to inspect:**
+- `event_type` and `timestamp`
+- `flow_id`
+- Source and destination IP addresses and ports
+- `proto` and `app_proto`
+- Nested `alert` fields: `signature_id`, `signature`, `severity`, `category`, and `action`
+- Presence and types of optional fields
+
+**Method:** Read-only Python inspection of one alert record, with JSON validity checks and a compact field summary.
+
+**Constraints:** Do not modify the EVE log, configuration, rules, or source code. Do not infer attack success or prevention effectiveness from an alert.
+
+**Status:** Dedicated alert schema inspection planned; the exact output path must be confirmed before parsing.
+
+### Dedicated Suricata Alert Schema Verified — 12 October 2026
+
+**Inspection method:** Read-only Python inspection of EVE JSON files under `data/suricata-test/`.
+
+**Files found:**
+- `data/suricata-test/alert-logs/eve.json`
+- `data/suricata-test/candidate-logs/eve.json`
+
+**Alert records found:** 2 across the inspected files.
+
+**Verified event structure:**
+- Top-level fields include `timestamp`, `flow_id`, `src_ip`, `src_port`, `dest_ip`, `dest_port`, `proto`, `app_proto`, `event_type`, and nested `alert`.
+- Nested alert fields include `action`, `gid`, `signature_id`, `rev`, `signature`, `category`, and `severity`.
+- The inspected synthetic alert used signature ID `9900001`, protocol `UDP`, and application protocol `dns`.
+- Its `alert.action` was `allowed`, consistent with alert-only IDS operation.
+
+**Schema implication:** The parser must read signature metadata from the nested `alert` object. `proto` and `app_proto` must remain distinct fields.
+
+**Evidence limitation:** This verifies the event structure and alert-generation path, not real-world detection accuracy or prevention effectiveness.
+
+**Status:** Representative alert schema verified; parser implementation pending.
+
+### Dedicated Suricata Alert Schema Verified — 12 October 2026
+
+**Inspection method:** Read-only Python inspection of EVE JSON files under `data/suricata-test/`.
+
+**Files found:**
+- `data/suricata-test/alert-logs/eve.json`
+- `data/suricata-test/candidate-logs/eve.json`
+
+**Alert records found:** 2 across the inspected files.
+
+**Verified event structure:**
+- Top-level fields include `timestamp`, `flow_id`, `src_ip`, `src_port`, `dest_ip`, `dest_port`, `proto`, `app_proto`, `event_type`, and nested `alert`.
+- Nested alert fields include `action`, `gid`, `signature_id`, `rev`, `signature`, `category`, and `severity`.
+- The inspected synthetic alert used signature ID `9900001`, protocol `UDP`, and application protocol `dns`.
+- Its `alert.action` was `allowed`, consistent with alert-only IDS operation.
+
+**Schema implication:** The parser must read signature metadata from the nested `alert` object. `proto` and `app_proto` must remain distinct fields.
+
+**Evidence limitation:** This verifies the event structure and alert-generation path, not real-world detection accuracy or prevention effectiveness.
+
+**Status:** Representative alert schema verified; parser implementation pending.
+
+### EVE Parser File Creation Interrupted — 12 October 2026
+
+**Target file:** `services/ml-service/eve_ingestion.py`
+
+**Observation:** The terminal output from the heredoc creation command shows only the initial imports and fragments of the intended Python code. Successful file creation has not been verified.
+
+**Assessment:** The file may be incomplete or malformed. No syntax check or functional test has been performed.
+
+**Recovery plan:**
+1. Inspect the current file contents and size.
+2. Confirm the actual state before attempting recovery.
+3. Recreate or repair the module using a paste-safe method.
+4. Run a Python syntax check before functional tests.
+
+**Preservation constraints:** Do not modify the ML model, Suricata configuration or rules, blockchain components, or dependency manifests.
+
+**Status:** Initial file creation unverified; recovery inspection required.
+
+### EVE Parser Syntax Check Passed — 12 October 2026
+
+**File:** `services/ml-service/eve_ingestion.py`
+
+**Command:** `python -m py_compile services/ml-service/eve_ingestion.py`
+
+**Result:** Passed. Python returned to the shell prompt without reporting a syntax error.
+
+**Verified so far:** The file exists, contains the intended parser functions, and compiles under Python 3.12.3.
+
+**Not yet verified:** Functional behavior, malformed-line recovery, event classification, optional-field handling, and raw-event preservation.
+
+**Next step:** Run read-only functional checks against the existing offline EVE data and synthetic in-memory cases. Do not modify the model, Suricata configuration, rules, or dependency manifests.
+
+**Status:** Syntax valid; functional validation pending.
+
+### EVE Parser Functional Tests Passed — 12 October 2026
+
+**Module:** `services/ml-service/eve_ingestion.py`
+
+**Test results:**
+- `data/suricata-test/alert-logs/eve.json`: 1 alert normalized successfully.
+- `data/suricata-test/candidate-logs/eve.json`: 1 alert normalized successfully.
+- Synthetic non-alert event: correctly classified as `non_alert`.
+- Malformed JSON line: correctly classified as `malformed`, with its line number.
+- Subsequent valid alert: processed successfully after malformed input.
+- JSON array instead of an object: correctly classified as `malformed`.
+- Missing optional source fields: represented as `None`.
+- Raw-event preservation: normalized event's `raw_event` matched the original parsed event.
+
+**Result:** All executed parser assertions passed. No dependencies were installed, and existing EVE logs were not modified.
+
+**Scope limitation:** These checks validate parsing and normalization behavior. They do not establish ML detection quality, real-world attack detection, or prevention effectiveness.
+
+**Next step:** Review the module's input validation and error-reporting behavior before deciding whether to add a persistent automated test suite.
+
+**Status:** Initial EVE parser implemented and functionally validated.
+
+### EVE Parser Input Validation Review Plan — 12 October 2026
+
+**Current implementation:** `services/ml-service/eve_ingestion.py`
+
+**Verified behavior:** Syntax compilation and initial functional checks passed for existing Suricata alert records, non-alert records, malformed JSON, non-object JSON values, optional fields, and raw-event preservation.
+
+**Edge cases to review:**
+1. An alert event whose `alert` field is missing or is not a JSON object.
+2. An alert event whose signature ID or timestamp has an unexpected type.
+3. An event with a missing or unknown `event_type`.
+4. An empty EVE file or a file containing only blank lines.
+5. A missing or unreadable input file.
+6. Whether the parser should distinguish syntactically valid JSON from semantically valid Suricata alert records.
+
+**Review objective:** Decide which conditions should remain acceptable with optional `None` values and which should be reported as validation errors. Avoid inventing missing fields or silently claiming that an incomplete event is fully valid.
+
+**Constraints:** Review only; do not modify source code or install dependencies yet. Preserve the existing parser's current behavior until the review is documented.
+
+**Status:** Initial functional validation passed; edge-case policy review pending.
+
+### EVE Parser Validation Policy — 12 October 2026
+
+**Reviewed file:** `services/ml-service/eve_ingestion.py`
+
+**Existing behavior:**
+- Invalid JSON syntax is reported as `malformed`.
+- JSON values that are not objects are reported as `malformed`.
+- Valid non-alert objects are reported as `non_alert`.
+- Any object with `event_type: "alert"` is currently normalized, even when its nested alert metadata is missing or invalid.
+
+**Proposed validation policy:**
+1. Require `event_type` to be a non-empty string.
+2. Classify valid, recognized non-alert events as `non_alert`.
+3. Report missing or invalid event types as `malformed`.
+4. Require alert events to contain an `alert` object.
+5. Require alert events to contain a positive integer `signature_id`; reject booleans and strings as substitutes for integers.
+6. Keep optional fields nullable; do not invent timestamps, IP addresses, ports, protocol names, severity values, or categories.
+7. Preserve raw parsed events for both valid alerts and malformed semantic records whenever JSON parsing succeeded.
+8. Continue processing later lines after an invalid record.
+9. Do not claim full semantic validation of every Suricata EVE field; validate only the minimum contract required by this component.
+
+**Compatibility:** Existing known-good synthetic and built-in signature alerts must continue to normalize successfully.
+
+**Next step:** Implement these focused validation checks and add tests for missing alert metadata, invalid signature IDs, missing event types, and continued processing.
+
+**Status:** Review complete; validation changes pending.
+
+### EVE Parser Semantic Validation Added — 12 October 2026
+
+**File:** `services/ml-service/eve_ingestion.py`
+
+**Syntax check:** `python -m py_compile services/ml-service/eve_ingestion.py` completed successfully after the update.
+
+**Validation changes implemented:**
+- `event_type` must be a non-empty string.
+- Alert events must contain an `alert` object.
+- `alert.signature_id` must be a positive integer; booleans and strings are rejected.
+- Missing optional normalized fields remain `None`.
+- Parsed source events are retained in malformed results when JSON parsing succeeds.
+- Processing continues after invalid records.
+
+**Not yet verified:** Functional regression tests against existing EVE alert files and new semantic-validation cases.
+
+**Next step:** Run the regression and edge-case test suite before treating the updated parser as validated.
+
+**Status:** Updated source compiles; functional regression testing pending.
+
+### EVE Parser Edge-Case Test Needs Diagnosis — 12 October 2026
+
+**Module:** `services/ml-service/eve_ingestion.py`
+
+**Regression results:**
+- Existing synthetic-alert EVE file: 1 alert normalized successfully.
+- Existing built-in-signature EVE file: 1 alert normalized successfully.
+
+**Edge-case test result:** The temporary test script raised `TypeError: 'NoneType' object is not subscriptable`. The full edge-case suite did not complete.
+
+**Assessment:** The failure has not yet been attributed to the parser or test script. No source-code changes should be made until the failing test expression and actual parser output are inspected.
+
+**Next step:** Rerun the synthetic fixture with diagnostic output showing each record's line number, status, error, and whether a normalized record exists.
+
+**Status:** Existing-alert regression checks passed; edge-case suite inconclusive.
+
+### EVE Parser Edge-Case Failure Diagnosed — 12 October 2026
+
+**Root cause:** The synthetic test script used the wrong zero-based list index when retrieving the valid alert record. It accessed `results[5]`, which represents the record with signature ID `0`, instead of `results[6]`, which represents the valid alert with signature ID `123`.
+
+**Diagnostic results:** All nine records received the expected status:
+- DNS event: `non_alert`
+- Invalid JSON: `malformed`
+- Missing alert object: `malformed`
+- String signature ID: `malformed`
+- Boolean signature ID: `malformed`
+- Zero signature ID: `malformed`
+- Positive integer signature ID: `alert`
+- Missing event type: `malformed`
+- Blank event type: `malformed`
+
+**Conclusion:** The observed failure was caused by the test script's incorrect index, not by a demonstrated parser defect. No source-code change was required.
+
+**Next step:** Rerun the complete assertion-based regression and edge-case suite with the corrected index.
+
+**Status:** Root cause identified; final assertion-based verification pending.
+
+### EVE Parser Regression and Edge-Case Tests Passed — 12 October 2026
+
+**Module:** `services/ml-service/eve_ingestion.py`
+
+**Regression checks:**
+- `data/suricata-test/alert-logs/eve.json`: 1 alert normalized successfully.
+- `data/suricata-test/candidate-logs/eve.json`: 1 alert normalized successfully.
+- Schema version, positive signature ID, and raw-event preservation assertions passed for existing alerts.
+
+**Edge-case checks:** All nine classifications matched expectations:
+- Valid non-alert event.
+- Malformed JSON.
+- Missing alert object.
+- String signature ID.
+- Boolean signature ID.
+- Zero signature ID.
+- Valid positive integer signature ID.
+- Missing event type.
+- Blank event type.
+
+**Additional assertions passed:**
+- Malformed records retained their source line numbers.
+- Parsing continued after malformed input.
+- Missing optional source fields were represented as `None`.
+- Parsed source events were preserved in normalized output and semantic-error results.
+
+**Test correction:** The previous test failure was caused by an incorrect zero-based index in the test script. The corrected assertion suite completed successfully without requiring a source-code change.
+
+**Scope limitation:** These results validate parsing and normalization behavior only. They do not demonstrate ML detection quality, real-world attack detection, or prevention effectiveness.
+
+**Next step:** Add a persistent standard-library `unittest` suite under `tests/` so parser regressions can be checked reproducibly.
+
+**Status:** Initial parser implementation, syntax check, existing-alert regression tests, and edge-case tests passed.
+
+### Permanent EVE Parser Test Suite Plan — 12 October 2026
+
+**Target file:** `tests/test_eve_ingestion.py`
+
+**Test framework:** Python standard-library `unittest`; no additional dependencies.
+
+**Planned test coverage:**
+1. Normalize a valid alert and verify its schema version and signature fields.
+2. Preserve the original event in `raw_event`.
+3. Classify valid non-alert events correctly.
+4. Report malformed JSON with the correct line number.
+5. Reject non-object JSON values.
+6. Reject missing or blank event types.
+7. Reject alert records with a missing or invalid `alert` object.
+8. Reject missing, non-integer, boolean, and non-positive signature IDs.
+9. Continue processing valid records after malformed input.
+10. Preserve nullable optional fields as `None`.
+
+**Test design:** Use temporary fixture files for deterministic unit tests. Keep unit tests independent of existing Suricata log files so they remain reproducible even if those logs are rotated or regenerated.
+
+**Constraints:** Add only the test file in this step. Do not change the parser, model, Suricata configuration, rules, dependencies, or blockchain components.
+
+**Status:** Test plan documented; permanent test suite not yet created.
+
+### Permanent EVE Parser Unit Tests Passed — 12 October 2026
+
+**Test file:** `tests/test_eve_ingestion.py`
+
+**Test command:** `python -m unittest discover -s tests -p 'test_*.py' -v`
+
+**Result:** 10 tests passed; 0 failures; 0 errors. Runtime was approximately 0.008 seconds.
+
+**Verified behaviors:**
+- Valid alert normalization and schema version.
+- Original event preservation.
+- Non-alert classification.
+- Malformed JSON reporting and continued processing.
+- Rejection of non-object JSON values.
+- Rejection of missing or blank event types.
+- Rejection of missing or invalid alert objects.
+- Rejection of invalid signature IDs, including strings, booleans, zero, negative integers, and floats.
+- Acceptance of positive integer signature IDs.
+- Nullable optional fields and source-event preservation on semantic errors.
+
+**Dependencies:** No new packages installed; tests use Python's standard-library `unittest`.
+
+**Scope limitation:** These tests establish parser behavior only. They do not demonstrate ML detection accuracy, live traffic integration, or prevention effectiveness.
+
+**Next step:** Review the working-tree changes and repository ignore rules before deciding what should be committed. Do not commit generated logs, PCAPs, downloaded rules, or other test artifacts.
+
+**Status:** EVE parser and permanent unit test suite validated.
+
+### Git Working-Tree Review — 12 October 2026
+
+**Files reported by Git:**
+- Modified: `.gitignore`
+- Modified: `docs/research-log.md`
+- Untracked: `config/suricata/`
+- Untracked: `rules/`
+- Untracked: `services/ml-service/eve_ingestion.py`
+- Untracked: `tests/test_eve_ingestion.py`
+
+**Change summary:** The research log has 2,280 added lines in the current diff. This requires inspection before staging to ensure the content is intentional.
+
+**Ignore verification:** Generated EVE logs and the downloaded Suricata ruleset are ignored by Git. They should not be added to a commit.
+
+**New implementation files:** The EVE ingestion module and its standard-library unit tests are present in the working tree. The permanent test suite previously passed all 10 tests.
+
+**Next step:** Inspect the full untracked-file inventory and review `.gitignore` changes. Verify the research-log diff before staging any files.
+
+**Constraints:** Do not stage, commit, or push files until the change inventory is reviewed. Preserve runtime configuration and research evidence; exclude downloaded rules, generated logs, and PCAPs.
+
+**Status:** Initial working-tree review complete; staging decision pending.
+
+### Suricata File Inventory and Research-Log Review — 12 October 2026
+
+**Configuration files found:**
+- `config/suricata/suricata.yaml` — 93,427 bytes; generated runtime configuration.
+- `config/suricata/suricata.yaml.in` — 93,543 bytes; upstream template.
+
+**Rules files found:**
+- `rules/suricata/.gitkeep` — empty directory placeholder.
+- `rules/suricata/classification.config` — 3,228 bytes.
+- `rules/suricata/suricata.rules` — 45,892,735 bytes.
+
+**Ignore-rule finding:** `.gitignore` excludes files under `/rules/suricata/` while explicitly allowing `.gitkeep`. Generated logs and test artifacts are also ignored.
+
+**Research-log finding:** The current diff reports 2,302 added lines. The initial preview contains some apparent missing spaces in sentences. The complete change must be checked before staging or committing.
+
+**Proposed tracking policy:** Track the project-owned parser, permanent tests, intended runtime configuration and template, documentation, and the rules-directory placeholder where appropriate. Do not track generated logs, PCAPs, or the downloaded/generated full ruleset.
+
+**Status:** File inventory collected; content and formatting review pending. No files staged, committed, or pushed.
+
+### Suricata Configuration and Whitespace Review — 12 October 2026
+
+**Runtime configuration:** `config/suricata/suricata.yaml` contains substitutions for the Suricata 8.0.4 template, including the version, log directory, EVE enablement, plugin comments, and selected filesystem paths. The upstream template intentionally retains build-time placeholders.
+
+**Placeholder check:** The runtime configuration has no matches for the checked placeholder patterns. The template retains expected placeholders such as `@PACKAGE_VERSION@` and `@MAJOR_MINOR@`.
+
+**Research-log formatting:** `git diff --check` reports trailing whitespace on line 3733, in a `suricata-update` tool entry. This needs a targeted review before staging.
+
+**Next action:** Inspect the affected research-log section and verify runtime configuration paths used for rules, classification, reference data, and logging. Make no broad automated replacements.
+
+**Status:** Initial configuration comparison complete; final pre-staging review pending.
+
+### Suricata Path Verification and Git Ignore Review — 12 October 2026
+
+**Verified runtime settings:**
+- Default log directory: `/var/log/suricata`
+- EVE JSON output is enabled and uses `eve.json`.
+
+**Git ignore verification:**
+- Downloaded/generated Suricata rules and classification data are ignored.
+- Generated Suricata logs are ignored.
+- Synthetic PCAP test files are ignored.
+
+**Formatting issue:** `git diff --check` identifies trailing whitespace on the `suricata-update` version line at line 3733. A targeted correction is required.
+
+**Outstanding verification:** The previous output did not establish the active default rule path, rule filename, classification configuration path, or reference configuration path. These settings must be checked explicitly before deciding whether to track the runtime configuration.
+
+**Status:** Ignore behavior verified; one whitespace issue and runtime path verification remain.
+
+### GitHub Push Preparation — 12 October 2026
+
+**Objective:** Safely publish the reviewed decentralized IPS project changes to the existing `origin` remote on branch `main`.
+
+**Intended files for review:** `.gitignore`, `docs/research-log.md`, the Suricata runtime configuration and upstream template, `services/ml-service/eve_ingestion.py`, and `tests/test_eve_ingestion.py`. Track `rules/suricata/.gitkeep` only as a directory placeholder if appropriate.
+
+**Excluded artifacts:** Downloaded/generated Suricata rules, generated classification data, EVE logs, PCAPs, and temporary test artifacts.
+
+**Required checks:** Verify runtime configuration paths, correct the identified research-log whitespace, run the permanent unit tests, inspect the staged diff, and confirm that no unintended files are staged.
+
+**Publishing policy:** Commit and push only after these checks pass. Do not force-push or delete existing project resources.
+
+**Status:** Final pre-push review pending.
+
+### Final Pre-Commit Validation — 12 October 2026
+
+**Unit tests:** All 10 permanent EVE ingestion tests passed using Python's standard-library `unittest` runner.
+
+**Suricata runtime paths verified:**
+- Default rule directory: `/rules`
+- Rules file: `suricata.rules`
+- Classification configuration: `/rules/classification.config`
+- Reference configuration: `/usr/share/suricata/reference.config`
+
+**Outstanding issue:** `git diff --check` reports trailing whitespace on the `suricata-update` tool version line at line 3733 in `docs/research-log.md`.
+
+**Next action:** Remove only the trailing whitespace on the affected line, rerun validation, and inspect the staged file list and diff before committing.
+
+**Status:** Tests passed; whitespace correction and final Git review pending.
+
+### Git Staging Decision — 12 October 2026
+
+**Validation results:**
+- All 10 permanent EVE ingestion unit tests passed.
+- `git diff --check` completed without errors after correcting the identified trailing whitespace.
+- Suricata rule, classification, and reference paths were verified.
+
+**Files selected for staging review:**
+- `.gitignore`
+- `docs/research-log.md`
+- `config/suricata/suricata.yaml`
+- `config/suricata/suricata.yaml.in`
+- `rules/suricata/.gitkeep`
+- `services/ml-service/eve_ingestion.py`
+- `tests/test_eve_ingestion.py`
+
+**Excluded from staging:** Downloaded/generated rules, generated classification data, logs, PCAPs, and temporary test artifacts.
+
+**Publishing gate:** Inspect the staged file list, staged diff, and staged whitespace validation before committing. Push only after the review passes.
+
+**Status:** Validation passed; staging review pending.
+
+### Staged Configuration Whitespace Review — 12 October 2026
+
+**Staged files:** Seven intended project paths are staged for review.
+
+**Validation finding:** `git diff --cached --check` identified trailing whitespace on three comment lines in each Suricata configuration file:
+- `config/suricata/suricata.yaml`
+- `config/suricata/suricata.yaml.in`
+
+**Assessment:** The reported issues are whitespace in comments, not evidence of a runtime configuration failure.
+
+**Next action:** Remove trailing whitespace from the two configuration files, restage them, and rerun staged whitespace validation and the parser unit tests.
+
+**Safety:** Do not include downloaded rules, generated logs, PCAPs, or temporary test artifacts. Do not commit until staged validation passes.
+
+**Status:** Staging review found formatting issues; correction pending.
+
+### Staged Validation Passed — 12 October 2026
+
+**Permanent unit tests:** All 10 EVE ingestion tests passed.
+
+**Whitespace validation:** `git diff --cached --check` completed without errors after trailing whitespace was removed from both Suricata configuration files.
+
+**Staged inventory:** Seven approved paths are staged:
+- `.gitignore`
+- `config/suricata/suricata.yaml`
+- `config/suricata/suricata.yaml.in`
+- `docs/research-log.md`
+- `rules/suricata/.gitkeep`
+- `services/ml-service/eve_ingestion.py`
+- `tests/test_eve_ingestion.py`
+
+**Excluded artifacts:** Downloaded/generated rules, generated classification data, logs, PCAPs, and temporary test artifacts.
+
+**Next action:** Perform a final staged-diff review, create a commit, push to `origin main`, and verify the resulting commit and remote synchronization.
+
+**Status:** Staged validation passed; commit and push pending.
+
+### Final Git Review — 12 October 2026
+
+**Branch and remote:** The current branch is `main`, with `origin` pointing to `https://github.com/Ak7865/immunet-ips.git`.
+
+**Staged review:** Seven intended paths are staged. The staged whitespace check passed, and the staged inventory contains no downloaded rules, generated logs, or PCAP files.
+
+**Remaining change:** `docs/research-log.md` has additional unstaged edits after the initial staging. These must be included and checked before the commit.
+
+**Next action:** Stage the updated research log, rerun staged whitespace validation and unit tests, commit the reviewed changes, push to `origin main`, and verify the resulting commit and working-tree state.
+
+**Status:** Final review passed with research-log restaging required; publishing pending.
+

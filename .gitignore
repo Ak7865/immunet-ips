@@ -28,3 +28,7 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Downloaded/generated Suricata rules
+/rules/suricata/*
+!/rules/suricata/.gitkeep
