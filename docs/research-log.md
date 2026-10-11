@@ -1400,3 +1400,31 @@ The existing `iter_csv_chunks()` function in `ml/training/train_binary_capture_h
 
 **Status:** Review complete; staging pending.
 
+### Evaluation Diagnostic Commit Preparation — 11 October 2026
+
+**Final checks passed:**
+- Staged whitespace validation completed without warnings.
+- Python syntax compilation completed without errors.
+- Exactly two files are staged:
+  - `docs/research-log.md`
+  - `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Change purpose:** Add a reproducible evaluation-only diagnostic that reports held-out attack-family performance and documents the results.
+
+**Scope:** No model retraining, model artifact changes, or dataset changes are included in the staged files.
+
+**Status:** Ready for local commit; remote push pending.
+
+### Post-Commit Working-Tree Review — 11 October 2026
+
+**Latest local commit:** `2ff0a98` — `Add capture-holdout family evaluation`
+
+**Observed status:**
+- Local `main` is ahead of `origin/main` by one commit.
+- `docs/research-log.md` has additional uncommitted changes.
+- The evaluation script has been committed.
+
+**Next action:** Inspect the remaining research-log diff to determine whether it contains a useful note added after the commit or an unintended change. Do not discard changes or push until the remaining diff is reviewed.
+
+**Status:** Post-commit review pending.
+
