@@ -1428,3 +1428,1854 @@ The existing `iter_csv_chunks()` function in `ml/training/train_binary_capture_h
 
 **Status:** Post-commit review pending.
 
+### Capture-Holdout Evaluation Push Completed — 11 October 2026
+
+**Pushed commits:**
+- `2ff0a98` — Add capture-holdout family evaluation
+- `20ecf45` — Document capture-holdout evaluation workflow
+
+**Remote:** `origin/main`
+
+**Push result:** Successful. The remote branch advanced from `1b6561c` to `20ecf45`.
+
+**Next action:** Verify local and remote branch synchronization.
+
+**Status:** Changes pushed; final synchronization check pending.
+
+### Attack-Family Novelty vs Capture-Level Distribution Shift — 11 October 2026
+
+**Background:** The existing binary Random Forest detected only 5 of 2,180 attacks in the held-out Thursday Morning WebAttacks capture. The family-level diagnostic reported 0% recall for Web Attack Brute Force, 0.46% for Web Attack XSS, and 9.52% for Web Attack Sql Injection.
+
+**Research question:** To what extent can poor detection be associated with unfamiliar attack families versus capture-level distribution shift?
+
+**Current limitation:** The held-out WebAttacks capture differs from the training data in both attack-family composition and capture characteristics. The existing experiment cannot isolate these effects.
+
+**Next investigation:** Build a label-availability inventory across the processed CIC-IDS2017 captures. For each capture, record the original attack labels and their counts. Determine which attack families appear in multiple captures and which are restricted to a single capture.
+
+**Constraints:**
+1. Do not retrain or modify the existing model during this inventory step.
+2. Preserve original attack labels rather than collapsing them into BENIGN and ATTACK.
+3. Use the existing processed dataset and capture filenames.
+4. Treat the inventory as descriptive evidence, not causal proof.
+
+**Decision after inventory:** Use the observed label/capture overlap to determine whether a controlled evaluation can separate family novelty from capture-level shift.
+
+**Status:** Dataset overlap inventory pending.
+
+### Processed Dataset Inventory — 11 October 2026
+
+**Objective:** Identify the processed CIC-IDS2017 CSV files, their capture filenames, and the existing code that handles labels.
+
+**Checks:**
+1. List processed CSV and JSON artifacts.
+2. Inspect CSV file sizes to understand the scope of the inventory.
+3. Review existing label and capture references in the training and evaluation scripts.
+
+**Constraints:** Read-only inspection; no model retraining, data modification, or label remapping.
+
+**Status:** File and label inventory pending.
+
+### Processed Capture Inventory Findings — 11 October 2026
+
+**Inventory result:** Eight processed CIC-IDS2017 capture CSVs are present in `data/cicids2017/processed/`.
+
+**Capture files identified:**
+- `cleaned_Monday-WorkingHours.pcap_ISCX.csv`
+- `cleaned_Tuesday-WorkingHours.pcap_ISCX.csv`
+- `cleaned_Wednesday-workingHours.pcap_ISCX.csv`
+- `cleaned_Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv`
+- `cleaned_Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv`
+- `cleaned_Friday-WorkingHours-Morning.pcap_ISCX.csv`
+- `cleaned_Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv`
+- `cleaned_Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv`
+
+**Relevant finding:** The existing binary capture-holdout training script converts original labels into BENIGN/ATTACK values. The separate family evaluation script preserves the original `Label` values for the held-out capture.
+
+**Next investigation:** Count original labels by capture using chunked CSV reads. Report capture filename, original label, and row count. Verify that each capture's label counts sum to its total number of rows.
+
+**Constraints:** Read-only analysis; no retraining, dataset modification, or binary label remapping.
+
+**Status:** Capture filenames identified; label-overlap inventory pending.
+
+### Capture-Level Original Label Inventory Results — 11 October 2026
+
+**Status:** Inventory completed successfully across all eight processed CIC-IDS2017 captures.
+
+| Capture | Rows | Distinct original labels |
+|---|---:|---:|
+| Monday Working Hours | 529,918 | 1 |
+| Tuesday Working Hours | 445,909 | 3 |
+| Wednesday Working Hours | 692,703 | 6 |
+| Thursday Morning WebAttacks | 170,366 | 4 |
+| Thursday Afternoon Infiltration | 288,602 | 2 |
+| Friday Morning | 191,033 | 2 |
+| Friday Afternoon DDoS | 225,745 | 2 |
+| Friday Afternoon PortScan | 286,467 | 2 |
+
+**Validation:** For all eight captures, the sum of original-label counts equalled the total row count.
+
+**Initial observation:** The number of distinct labels varies substantially by capture. Monday has only one label, while Wednesday has six and Thursday Morning WebAttacks has four. This suggests label overlap must be examined explicitly before designing a controlled evaluation.
+
+**Limitation:** Distinct-label counts alone do not identify the exact shared or capture-specific attack families and cannot establish the cause of model performance differences.
+
+**Artifact:** `data/cicids2017/processed/capture_label_overlap_inventory.json`
+
+**Next action:** Inspect the actual per-capture label counts and identify attack families present in multiple captures versus those restricted to one capture.
+
+**Status:** Inventory complete; label-overlap analysis pending.
+
+### Original Label Overlap Findings — 11 October 2026
+
+**Status:** Capture-level label inventory inspected successfully.
+
+#### 1. Original label distribution
+
+| Capture | BENIGN rows | Attack families and counts |
+|---|---:|---|
+| Monday | 529,918 | None |
+| Tuesday | 432,074 | FTP-Patator: 7,938; SSH-Patator: 5,897 |
+| Wednesday | 440,031 | DoS GoldenEye: 10,293; DoS Hulk: 231,073; DoS Slowhttptest: 5,499; DoS slowloris: 5,796; Heartbleed: 11 |
+| Thursday Morning — WebAttacks | 168,186 | Web Attack Brute Force: 1,507; Web Attack SQL Injection: 21; Web Attack XSS: 652 |
+| Thursday Afternoon — Infiltration | 288,566 | Infiltration: 36 |
+| Friday Morning | 189,067 | Bot: 1,966 |
+| Friday Afternoon — DDoS | 97,718 | DDoS: 128,027 |
+| Friday Afternoon — PortScan | 127,537 | PortScan: 158,930 |
+
+#### 2. Initial interpretation
+
+- Monday contains only BENIGN-labelled traffic.
+- Tuesday and Wednesday contain multiple attack families.
+- The Thursday Morning WebAttacks capture contains three web-attack labels.
+- Infiltration, Bot, DDoS, and PortScan appear in their respective individual captures in this inventory.
+- The label inventory establishes where labels occur, but it does not establish whether a family is intrinsically difficult to detect or whether capture-specific feature distributions explain model performance.
+
+#### 3. Connection to the held-out evaluation
+
+The binary Random Forest detected only 5 of 2,180 attack rows in the held-out Thursday Morning WebAttacks capture. Family-level recall was 0% for Brute Force, approximately 0.46% for XSS, and approximately 9.52% for SQL Injection.
+
+These results motivate a more controlled investigation of capture-level and feature-distribution effects. They do not, by themselves, prove the cause of the poor recall.
+
+**Artifact:** `data/cicids2017/processed/capture_label_overlap_inventory.json`
+
+**Next action:** Compare the held-out capture's feature distributions with the training captures, beginning with a small, reproducible set of numeric features.
+
+**Status:** Label inventory complete; feature-distribution comparison pending.
+
+### Feature-Distribution Comparison — Planned Method — 11 October 2026
+
+**Objective:** Investigate whether the held-out Thursday Morning WebAttacks capture differs from the eligible training captures in selected numeric feature distributions.
+
+**Training captures:**
+- Monday Working Hours
+- Tuesday Working Hours
+- Wednesday Working Hours
+- Thursday Afternoon Infiltration
+
+**Held-out capture:**
+- Thursday Morning WebAttacks
+
+**Preprocessing requirements:**
+1. Use the existing 77 feature columns, excluding `Label`.
+2. Apply numeric coercion consistently.
+3. Treat positive and negative infinity as missing values.
+4. Report missing-value rates rather than silently assuming all features are valid.
+5. Compare robust summary statistics, including median and interquartile range, for selected features.
+6. Do not retrain the model or alter the processed datasets.
+
+**Interpretation limitation:** Differences in feature distributions can indicate covariate shift, but they do not establish its cause or prove that it explains poor attack recall. The held-out capture also contains attack families not represented in the training captures.
+
+**Status:** Method planned; feature selection and implementation pending.
+
+### Feature Selection for Capture-Distribution Analysis — 11 October 2026
+
+**Status:** Feature schema verified.
+
+The saved capture-holdout report contains 77 feature columns, excluding `Label`, and identifies the held-out capture as `cleaned_Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv` with 170,366 rows.
+
+**Initial features proposed for comparison:**
+
+1. `Destination Port` — destination-port distribution.
+2. `Flow Duration` — flow-duration distribution.
+3. `Total Fwd Packets` — forward packet counts.
+4. `Total Backward Packets` — backward packet counts.
+5. `Flow Bytes/s` — flow byte rate.
+6. `Flow Packets/s` — flow packet rate.
+7. `Packet Length Mean` — average packet length.
+8. `SYN Flag Count` — SYN flag counts.
+9. `Init_Win_bytes_forward` — initial forward TCP window value.
+10. `Idle Mean` — mean idle time.
+
+These features cover ports, flow volume, rates, packet characteristics, TCP-related behavior, and timing. Their selection is exploratory, not a claim that they are the most important features for detecting web attacks.
+
+**Planned comparison:** Compare the combined eligible training captures against the held-out capture using medians, interquartile ranges, missing-value rates, and selected quantiles. Preserve the original training/held-out separation and do not retrain the model.
+
+**Limitation:** Summary-statistic differences are descriptive evidence of distribution differences, not proof of their cause or of their effect on model performance.
+
+**Next action:** Implement a chunked, read-only feature-summary script and validate its output.
+
+### Script Validation and Memory Review — 11 October 2026
+
+**Validation results:**
+- Python compilation produced no reported syntax error.
+- `git diff --check` reported a trailing blank line at the end of `docs/research-log.md`.
+- Git status showed the research log modified and two evaluation scripts untracked.
+
+**Memory review:** The initial feature-distribution script reads CSV files in chunks but retains all valid values for each selected feature to calculate exact quantiles. Chunked input alone therefore does not guarantee low memory usage.
+
+**Next action:** Remove the unnecessary trailing blank line from the research log and revise the comparison method to use bounded-memory summaries before executing the analysis.
+
+**Status:** Syntax check appears successful; formatting and memory-efficiency improvements pending.
+
+
+### Feature Analysis Memory Optimization — 11 October 2026
+
+**Previous issue:** The initial comparison script read CSVs in chunks but retained every valid value for each selected feature. This could consume excessive RAM under the WSL memory limit.
+
+**Planned improvement:**
+- Continue reading CSVs in chunks of 50,000 rows.
+- Calculate bounded-memory descriptive summaries.
+- Report valid and missing counts, missing-value rates, minimum, maximum, mean, standard deviation, and approximate quantiles.
+- Clearly document the quantile estimation method and its limitations.
+- Preserve the same four training captures, held-out capture, and ten selected features.
+- Do not retrain the model or modify processed CSV files.
+
+**Status:** Research-log whitespace warning resolved; memory optimization pending.
+
+### Reservoir-Sampling Correctness Review — 11 October 2026
+
+**Status:** Revised feature-distribution script saved but not executed.
+
+**Issue identified:** The current implementation combines the existing reservoir with incoming values and uses separate replacement logic depending on reservoir size. This complicates correctness verification and risks producing an incorrectly sampled population.
+
+**Required correction:**
+- Implement standard reservoir sampling with a clearly maintained count of valid observations.
+- Keep no more than 100,000 sampled values per feature per capture.
+- Ensure missing and non-finite values are excluded consistently.
+- Make sampling reproducible using a fixed random seed.
+- Verify the implementation with a small synthetic dataset before processing the CIC-IDS2017 captures.
+
+**Safety of the experiment:** No model retraining or processed-dataset modification is intended.
+
+**Next action:** Replace the sampling logic with a simpler, verifiable implementation and test it before running the full analysis.
+
+### Synthetic Validation of Reservoir Sampling — 11 October 2026
+
+**Objective:** Verify that the corrected feature-sampling algorithm respects the configured reservoir size and produces reproducible results.
+
+**Checks planned:**
+1. The reservoir never exceeds its configured capacity.
+2. Every observation in a small synthetic stream is eligible for selection.
+3. Repeated runs with the same random seed produce the same reservoir.
+4. The sample size equals the population size when the population is smaller than the reservoir capacity.
+
+**Scope:** Synthetic data only. No processed dataset is scanned, and no model is retrained.
+
+**Status:** Sampling implementation revised; synthetic validation pending.
+
+### Feature-Distribution Comparison Execution — 11 October 2026
+
+**Status:** Analysis script executed successfully.
+
+Five captures were scanned:
+
+| Capture | Rows scanned |
+|---|---:|
+| Monday Working Hours | 529,918 |
+| Thursday Afternoon Infiltration | 288,602 |
+| Tuesday Working Hours | 445,909 |
+| Wednesday Working Hours | 692,703 |
+| Thursday Morning WebAttacks (held out) | 170,366 |
+| **Total** | **2,127,498** |
+
+The script completed each capture and reported that feature summaries were calculated.
+
+**Output artifact:** `data/cicids2017/processed/capture_feature_distribution_comparison.json`
+
+**Method:** Chunked CSV reading and bounded reservoir sampling for ten selected numeric features. Quantiles and sample-based statistics are approximate.
+
+**Limitations:** Successful execution does not establish that the held-out capture differs significantly from the training captures. Distribution differences and their relationship to attack recall remain to be examined. The report is descriptive and does not represent model retraining.
+
+**Next action:** Inspect the saved JSON report and compare the feature summaries between the combined training captures and the held-out capture.
+
+**Status:** Analysis executed; interpretation pending.
+
+### Feature-Distribution Report Inspection — 11 October 2026
+
+**Objective:** Inspect the completed feature-distribution report and identify descriptive differences between the eligible training captures and the held-out Thursday Morning WebAttacks capture.
+
+**Report:** `data/cicids2017/processed/capture_feature_distribution_comparison.json`
+
+**Values to examine:**
+- Median and interquartile range (Q1–Q3).
+- Missing-value rates.
+- Valid observation counts.
+- Approximate sample-based statistics and their limitations.
+
+**Interpretation rules:**
+- Compare the held-out capture with individual training captures, not only a pooled summary.
+- Large numerical differences are observations, not proof of causation.
+- Do not infer feature importance from distribution differences alone.
+- Do not modify the model or source datasets during inspection.
+
+**Status:** Report generated; detailed inspection pending.
+
+### Initial Feature-Distribution Findings — 11 October 2026
+
+**Status:** The feature-distribution report has been inspected.
+
+**Observations:**
+- `Destination Port`, `Total Fwd Packets`, `Total Backward Packets`, `SYN Flag Count`, and `Idle Mean` have the same reported median in the held-out capture and the four eligible training captures.
+- `Flow Duration`, `Flow Bytes/s`, `Flow Packets/s`, `Packet Length Mean`, and `Init_Win_bytes_forward` show differences in their reported medians across captures.
+- The held-out capture has approximately 0.079% missing values in `Flow Bytes/s` and `Flow Packets/s`.
+- These are descriptive observations based on reservoir-sample statistics; the reported quantiles are approximate.
+
+**Interpretation limitation:** Similar medians do not imply identical distributions. Different medians do not establish causation or explain the model's low attack recall. The attack-family composition also differs between training and held-out captures.
+
+**Next action:** Inspect whether the selected features contain extreme values or strongly skewed distributions that make median comparisons insufficient. Avoid attributing the recall failure to any single feature without further evidence.
+
+**Status:** Initial comparison complete; distribution-shape investigation pending.
+
+### Distribution Shape and Extreme Values — 11 October 2026
+
+**Status:** Initial sample-based distribution-shape inspection completed.
+
+**Observations:**
+- `Flow Duration` has a held-out median of approximately 31,420 and a sample mean of approximately 12.57 million.
+- `Flow Bytes/s` has a held-out median of approximately 4,764 and a sample mean of approximately 1.847 million.
+- `Flow Packets/s` also shows a large difference between its median and sample mean.
+- `Packet Length Mean` has a held-out median of approximately 57.8 and a sample mean of approximately 99.87.
+- `Init_Win_bytes_forward` has a held-out median of 58 and a sample mean of approximately 6,263.
+- The sampled extrema include negative values for `Flow Duration`, `Flow Bytes/s`, and `Flow Packets/s`.
+
+**Interpretation:** These differences are consistent with strongly skewed distributions and possible extreme observations. Because the statistics are reservoir-sample estimates, they do not establish the exact full-dataset extrema or their frequencies.
+
+**Next action:** Inspect the original processed CSVs for negative and non-finite values in the selected features, counting occurrences by capture without modifying any data.
+
+**Status:** Distribution-shape inspection complete; value-quality investigation pending.
+
+### Feature Value-Quality Check — 11 October 2026
+
+**Status:** Read-only check completed across the five captures.
+
+**Held-out Thursday Morning WebAttacks capture:**
+- `Flow Duration`: 11 negative values out of 170,366 rows.
+- `Flow Bytes/s`: 10 negative values and 135 missing values.
+- `Flow Packets/s`: 11 negative values and 135 missing values.
+- `Packet Length Mean`: no negative or missing values.
+- `Init_Win_bytes_forward`: 81,911 negative values, approximately 48.08% of rows.
+
+**Cross-capture observations:**
+- Negative values in `Flow Duration` and `Flow Packets/s` are rare in every inspected capture.
+- Missing values in `Flow Bytes/s` and `Flow Packets/s` vary by capture.
+- Negative values in `Init_Win_bytes_forward` are common across all inspected captures and require interpretation using the feature's encoding conventions. They should not be removed or replaced without justification.
+
+**Interpretation limitation:** These counts identify data characteristics but do not establish that any feature caused the held-out model's poor attack recall.
+
+**Next action:** Inspect the distinct negative values in the selected features, especially `Flow Duration`, `Flow Bytes/s`, `Flow Packets/s`, and `Init_Win_bytes_forward`, without changing the dataset or model.
+
+**Status:** Value-quality counts complete; negative-value interpretation pending.
+
+### Distinct Negative-Value Patterns — 11 October 2026
+
+**Status:** Distinct negative values inspected across five captures.
+
+**Observations:**
+- All observed negative values of `Init_Win_bytes_forward` are `-1`.
+- Negative `Flow Duration` values are mostly `-1`, with a small number of `-2` and `-4` observations.
+- Negative `Flow Packets/s` values are concentrated at `-2,000,000`, with a few other values.
+- Negative `Flow Bytes/s` values are concentrated at `-12,000,000`, but the held-out capture contains one value of `-261,000,000`.
+
+**Interpretation limitation:** Repeated negative values may reflect dataset encoding or flow-calculation behavior, but their cause has not yet been established. No values were changed or removed.
+
+**Next action:** Inspect the affected records alongside their original labels and related flow features to investigate whether the negative rate and duration values occur together.
+
+**Status:** Negative-value inventory complete; record-level investigation pending.
+
+### Record-Level Investigation of Negative Flow Values — 11 October 2026
+
+**Objective:** Inspect a small sample of records containing negative flow-duration or flow-rate values, preserving their original labels and related feature values.
+
+**Fields to inspect:**
+- `Label`
+- `Destination Port`
+- `Flow Duration`
+- `Total Fwd Packets`
+- `Total Backward Packets`
+- `Flow Bytes/s`
+- `Flow Packets/s`
+- `Packet Length Mean`
+- `Init_Win_bytes_forward`
+
+**Method:** Read-only, chunked inspection of the processed captures. Print a maximum of five matching records per capture.
+
+**Limitations:** A small sample can illustrate patterns but cannot establish the cause or prevalence of an anomaly beyond the previously calculated counts. No preprocessing changes or model retraining are planned.
+
+**Status:** Record-level investigation planned.
+
+### Record-Level Negative Flow Value Findings — 11 October 2026
+
+**Status:** Read-only record inspection completed across five captures.
+
+**Observed pattern:**
+- The first five matching records in each capture were labelled `BENIGN`.
+- These sampled records had `Flow Duration = -1`, one forward packet, and one backward packet.
+- Negative `Flow Packets/s` values frequently occurred alongside negative flow duration.
+- Negative `Flow Bytes/s` values were also observed in many matching records.
+- One sampled record from the held-out Thursday Morning WebAttacks capture had `Flow Bytes/s = -261,000,000`.
+
+**Interpretation limitation:** These records illustrate a recurring pattern but do not establish the cause of the values, their overall impact on predictions, or whether they explain poor attack recall. The sample was selected by a negative-value condition and is not representative of the full capture.
+
+**Next action:** Quantify how often the negative-duration pattern occurs and determine whether its frequency differs between BENIGN and ATTACK records in the held-out capture.
+
+**Status:** Example records inspected; label-conditioned frequency analysis pending.
+
+### Label-Conditioned Negative Flow Duration Analysis — 11 October 2026
+
+**Dataset:** Held-out Thursday Morning WebAttacks capture
+**Method:** Read-only, chunked scan of `Label` and `Flow Duration`.
+
+| Original label | Total rows | Negative Flow Duration | Percentage |
+|---|---:|---:|---:|
+| BENIGN | 168,186 | 11 | 0.006540% |
+| ATTACK | 2,180 | 0 | 0.000000% |
+| Total | 170,366 | 11 | 0.006456% |
+
+**Validation:** The label-group totals reconcile to the 170,366 rows in the capture.
+
+**Finding:** All 11 records with `Flow Duration < 0` are labelled BENIGN. No attack records in this capture have negative flow duration.
+
+**Interpretation limitation:** Negative flow duration is rare in this capture. These counts do not explain the model's poor attack recall and do not establish the cause or predictive impact of the negative values.
+
+**Next action:** Quantify negative `Flow Bytes/s` and `Flow Packets/s` values by original label in the same held-out capture.
+
+**Status:** Label-conditioned negative-duration counts completed; rate-feature analysis pending.
+
+### Label-Conditioned Rate-Feature Quality Analysis — 11 October 2026
+
+**Dataset:** Held-out Thursday Morning WebAttacks capture
+**Method:** Read-only, chunked scan of `Label`, `Flow Bytes/s`, and `Flow Packets/s`.
+
+| Feature | BENIGN rows | BENIGN negative | BENIGN missing/non-numeric | ATTACK rows | ATTACK negative | ATTACK missing/non-numeric |
+|---|---:|---:|---:|---:|---:|---:|
+| Flow Bytes/s | 168,186 | 10 (0.005946%) | 135 (0.080268%) | 2,180 | 0 | 0 |
+| Flow Packets/s | 168,186 | 11 (0.006540%) | 135 (0.080268%) | 2,180 | 0 | 0 |
+
+**Validation:** The scan covered 170,366 records, comprising 168,186 BENIGN and 2,180 ATTACK records.
+
+**Findings:** All observed negative and missing rate values occurred in BENIGN records. Negative values were rare, and missing values affected 135 BENIGN records for each feature. No ATTACK record had a negative or missing value in either feature.
+
+**Interpretation limitation:** These counts do not establish why the values are negative or missing, whether they caused individual false positives, or whether they explain poor attack recall.
+
+**Next action:** Review the current preprocessing and model-inference pipeline to verify how missing and negative feature values are handled before making any changes.
+
+**Status:** Label-conditioned rate-feature quality counts completed; preprocessing review pending.
+
+### Preprocessing Pipeline Review — 11 October 2026
+
+**Status:** Initial source-code search completed; targeted code inspection pending.
+
+**Observed from source search:**
+- The capture-holdout training script replaces positive and negative infinity with missing values.
+- The training pipeline uses `SimpleImputer(strategy="median")`.
+- The family evaluation script also replaces positive and negative infinity with missing values before prediction.
+- The source search does not establish whether negative finite values are transformed, rejected, or passed directly to the model.
+
+**Next action:** Inspect the feature-loading, imputation, and prediction code in the capture-holdout training and family-evaluation scripts before proposing preprocessing changes.
+
+### Preprocessing Source-Code Inspection — 11 October 2026
+
+**Files inspected:**
+- `ml/training/train_binary_capture_holdout.py`
+- `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Confirmed behavior:**
+- Training converts feature columns to numeric values using `pd.to_numeric(errors="coerce")`.
+- Training replaces positive and negative infinity with `NaN`.
+- The saved model pipeline uses `SimpleImputer(strategy="median")` before the Random Forest classifier.
+- Family evaluation converts feature columns to numeric values and replaces positive and negative infinity with `NaN` before prediction.
+- The inspected code does not explicitly replace finite negative feature values.
+
+**Interpretation:** Negative finite values can reach the imputer and classifier unchanged. Missing values are handled by the pipeline's median imputer, subject to the fitted imputer's behavior.
+
+**Limitation:** Source inspection alone does not establish whether negative or missing values cause incorrect predictions. No model or dataset changes were made.
+
+**Next action:** Inspect false-positive and false-negative records to determine whether the suspicious feature values occur in actual model errors.
+
+**Status:** Preprocessing code inspected; prediction-error analysis pending.
+
+### Prediction-Error Analysis Preparation — 11 October 2026
+
+**Objective:** Determine whether suspicious feature values are associated with false-positive or false-negative predictions in the held-out capture.
+
+**Existing evaluation results:**
+- False positives: 56.
+- False negatives: 2,175.
+- True positives: 5.
+- True negatives: 168,130.
+
+**Approach:** Inspect the existing prediction-confidence and error-analysis implementation before adding new diagnostics. Preserve the saved model, current preprocessing, and dataset unchanged.
+
+**Limitations:** The aggregate confusion matrix does not establish whether negative or missing feature values contribute to individual prediction errors.
+
+**Next action:** Inspect `ml/evaluation/inspect_prediction_confidence.py` to identify its existing prediction, confidence, and output logic.
+
+**Status:** Error-analysis preparation documented; source inspection pending.
+
+### Prediction-Confidence Source Inspection — 11 October 2026
+
+**Objective:** Inspect the existing prediction-confidence script before implementing additional error diagnostics.
+
+**Target file:** `ml/evaluation/inspect_prediction_confidence.py`
+
+**Questions to resolve:**
+1. How are the saved model and held-out capture loaded?
+2. How are missing and infinite feature values handled?
+3. How are predictions and attack probabilities calculated?
+4. Are false-positive and false-negative records identified and their feature values retained?
+5. What output files and summary statistics are produced?
+
+**Constraint:** This is a read-only source inspection. No model, dataset, or preprocessing changes are authorized at this stage.
+
+**Status:** Inspection requested; findings pending.
+
+### Prediction-Confidence Script Review — 11 October 2026
+
+**File inspected:** `ml/evaluation/inspect_prediction_confidence.py`
+
+**Findings:**
+- The script loads `ml/models/binary_random_forest.joblib`, not the capture-holdout model.
+- It samples up to 2,000 records per original label in each of three Friday captures.
+- It converts infinite feature values to missing values and predicts using the loaded model.
+- Its final results contain capture name, true label, predicted label, and attack probability, but not the original feature values.
+- Its output is a summary grouped by capture and true label.
+
+**Limitation:** This script evaluates a different model on different captures. Its results cannot be treated as direct evidence explaining the errors of the capture-holdout model.
+
+**Next action:** Inspect the capture-holdout model's saved feature metadata and the existing error-analysis outputs before designing a record-level diagnostic for the correct model.
+
+**Status:** Existing confidence script reviewed; dedicated capture-holdout error analysis still needed.
+
+### Capture-Holdout Report Metadata Inspection — 11 October 2026
+
+**Objective:** Verify the feature metadata recorded in the capture-holdout evaluation report before implementing record-level prediction-error diagnostics.
+
+**Target report:** `data/cicids2017/processed/binary_capture_holdout_report.json`
+
+**Checks:**
+- Identify the report's top-level fields.
+- Locate any recorded feature names and their ordering.
+- Review available model, training, holdout, and imputation metadata.
+
+**Constraint:** Read-only inspection; no model retraining, dataset modification, or preprocessing changes.
+
+**Status:** Report metadata inspection pending.
+
+### Capture-Holdout Report Metadata Verified — 11 October 2026
+
+**Report:** `data/cicids2017/processed/binary_capture_holdout_report.json`
+
+**Findings:**
+- The report contains 77 feature names in the recorded feature order.
+- The recorded training sample contains 300,000 rows.
+- The report identifies median imputation fitted on the training sample only.
+- The report records the held-out capture, training captures, confusion matrix, classification metrics, model configuration, and limitations.
+
+**Implication:** Future record-level diagnostics should use the feature names and order recorded in this report and the corresponding capture-holdout model.
+
+**Limitation:** The report does not provide individual false-positive or false-negative records with their original feature values.
+
+**Next action:** Verify that the saved capture-holdout model's input feature names and ordering match the report metadata before running further error analysis.
+
+**Status:** Report metadata inspected; model/report feature compatibility check pending.
+
+### Model/Report Feature Compatibility Check — 11 October 2026
+
+**Objective:** Verify that the saved capture-holdout model expects the feature count and ordering recorded in the evaluation report.
+
+**Artifacts:**
+- `ml/models/binary_random_forest_capture_holdout.joblib`
+- `data/cicids2017/processed/binary_capture_holdout_report.json`
+
+**Checks:** Compare input feature counts, compare feature names and ordering when stored by the model, and inspect the model classes and pipeline steps.
+
+**Constraint:** Read-only artifact inspection; no retraining or data modification.
+
+**Status:** Compatibility check pending.
+
+### Model/Report Compatibility Check — 11 October 2026
+
+**Artifacts inspected:**
+- `ml/models/binary_random_forest_capture_holdout.joblib`
+- `data/cicids2017/processed/binary_capture_holdout_report.json`
+
+**Results:**
+- Report feature count: 77.
+- Model input feature count: 77.
+- The saved model does not expose `feature_names_in_`, so direct name-and-order comparison was unavailable.
+- Model classes are `[0, 1]`.
+- Pipeline steps are `imputer` and `classifier`.
+
+**Interpretation:** The feature counts and class encoding are consistent with the expected setup, but feature ordering remains unverified.
+
+**Next action:** Inspect the capture-holdout training script to confirm how the training feature order is selected and recorded.
+
+**Status:** Feature-count compatibility confirmed; feature-order verification pending.
+
+### Training Feature-Order Source Inspection — 11 October 2026
+
+**Objective:** Verify how `train_binary_capture_holdout.py` selects and orders model input features and records that order in the evaluation report.
+
+**Checks:**
+- Determine how the target `Label` column is excluded.
+- Identify how feature names and column order are established.
+- Verify how the training sample preserves the selected columns.
+- Locate the report-generation logic for `feature_names`.
+
+**Constraint:** Read-only source inspection; no model retraining or data modification.
+
+**Status:** Training feature-order inspection pending.
+
+### Training Feature-Order Source Inspection — 11 October 2026
+
+**File:** `ml/training/train_binary_capture_holdout.py`
+
+**Findings:**
+- The training script reads the CSV header, strips column-name whitespace, and excludes `Label` to define `expected_features`.
+- It checks that each training capture's feature names and ordering match `expected_features`.
+- It converts features to NumPy arrays in that established order.
+- It performs the same feature-schema check on the held-out capture before evaluation.
+- The report records `expected_features` in its `feature_names` field.
+
+**Interpretation:** The training script is designed to preserve a consistent feature order across training and evaluation.
+
+**Limitation:** Source inspection alone does not prove that the currently saved model and report were generated together from the inspected source version.
+
+**Next action:** Inspect the earlier portion of the training script where `expected_features` is established, then verify its consistency with the processed CSV header.
+
+**Status:** Feature-order logic reviewed; artifact provenance and direct ordering verification pending.
+
+### Direct Feature-Order Comparison — 11 October 2026
+
+**Objective:** Compare the capture-holdout report's recorded feature list with the processed Monday CSV header.
+
+**Method:** Read the CSV header only, strip column-name whitespace, exclude `Label`, and compare the resulting ordered list against the report's `feature_names`.
+
+**Constraint:** Read-only comparison; no model or dataset modifications.
+
+**Status:** Direct comparison pending.
+
+### Direct Feature-Order Comparison — 11 October 2026
+
+**Result:** Passed.
+
+- Processed Monday CSV feature count: 77.
+- Capture-holdout report feature count: 77.
+- Ordered feature lists match exactly after trimming whitespace and excluding `Label`.
+- The CSV contains exactly one `Label` column.
+
+**Interpretation:** The report's feature list matches the processed Monday CSV header used as the reference schema by the training script.
+
+**Limitation:** This comparison does not independently establish the saved model's historical training provenance or its original feature ordering.
+
+**Next action:** Review the capture-holdout training source's initial schema-establishment code to complete the source-level feature-order audit before designing record-level prediction-error analysis.
+
+**Status:** Report-to-header feature-order comparison passed.
+
+### Training Schema Establishment Review — 11 October 2026
+
+**Objective:** Inspect the initial schema-establishment section of the capture-holdout training script.
+
+**Target:** `ml/training/train_binary_capture_holdout.py`, lines 65–125.
+
+**Checks:**
+- Identify the source of `expected_features`.
+- Confirm how the target column is excluded.
+- Confirm when feature-schema validation occurs.
+
+**Constraint:** Read-only source inspection; no model retraining or dataset modification.
+
+**Status:** Initial schema-establishment review pending.
+
+### Training Schema Establishment Review — 11 October 2026
+
+**File:** `ml/training/train_binary_capture_holdout.py`
+
+**Findings:**
+- The script establishes `expected_features` from the first configured training capture's CSV header.
+- It strips column-name whitespace and excludes the `Label` target column.
+- It checks feature names and ordering across all configured training captures and the held-out capture before sampling or fitting.
+- It requires exactly 77 input features.
+- During training, each chunk is checked against the established feature order before conversion to a NumPy array.
+
+**Conclusion:** The source implements consistent feature-schema validation across the configured captures. Together with the successful report-to-Monday-header comparison, this supports schema consistency in the documented workflow.
+
+**Limitation:** The saved model does not expose feature names, so its historical training order cannot be independently verified from model metadata alone.
+
+**Next action:** Begin a record-level diagnostic using the correct capture-holdout model and held-out capture, retaining the original labels, predictions, and selected suspicious feature values.
+
+**Status:** Source-level schema audit completed; record-level error analysis pending.
+
+### False-Negative Record Diagnostic Preparation — 11 October 2026
+
+**Objective:** Identify whether an existing evaluation script can support record-level investigation of false negatives from the capture-holdout experiment.
+
+**Scope:**
+- Use `binary_random_forest_capture_holdout.joblib`.
+- Use the held-out Thursday Morning WebAttacks capture.
+- Preserve original attack-family labels.
+- Inspect selected feature values for actual false-negative records.
+- Keep the analysis read-only.
+
+**Constraint:** Do not retrain the model, alter feature handling, or modify the processed dataset.
+
+**Next action:** Inventory the existing evaluation scripts and select the appropriate implementation path.
+
+**Status:** Record-level diagnostic preparation pending.
+
+### Existing Family-Evaluation Script Review — 11 October 2026
+
+**File:** `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Objective:** Determine whether the existing family-level evaluation can support record-level false-negative analysis.
+
+**Checks:**
+- Confirm the model and held-out capture used.
+- Review label preservation and prediction logic.
+- Determine whether individual misclassified records and selected feature values are retained.
+- Identify any output-file side effects.
+
+**Constraint:** Read-only source inspection; do not execute or modify the evaluation script during this review.
+
+**Status:** Script review pending.
+
+### Family-Evaluation Script Review — 11 October 2026
+
+**File:** `ml/evaluation/evaluate_capture_holdout_by_family.py`
+
+**Findings:**
+- Loads `binary_random_forest_capture_holdout.joblib`.
+- Uses the held-out Thursday Morning WebAttacks capture.
+- Validates the held-out capture's feature names and ordering against the source report.
+- Converts non-numeric values to missing values and replaces positive and negative infinity with missing values before prediction.
+- Aggregates true positives and false negatives by original attack family.
+- Validates the evaluated row count and attack/false-negative/true-positive counts against the source report.
+- Writes aggregate results to `binary_capture_holdout_by_family.json`.
+- Does not retain individual misclassified records or their feature values.
+
+**Decision:** Preserve this evaluator unchanged and create a separate read-only diagnostic for individual false-negative records.
+
+**Next action:** Define the diagnostic's output fields and sampling strategy before implementing it.
+
+**Status:** Existing evaluator reviewed; dedicated record-level diagnostic selected.
+
+### Record-Level Diagnostic Design — 11 October 2026
+
+**Objective:** Investigate feature values in false-negative records from the held-out Thursday Morning WebAttacks capture.
+
+**Input artifacts:**
+- `ml/models/binary_random_forest_capture_holdout.joblib`
+- `data/cicids2017/processed/binary_capture_holdout_report.json`
+- The held-out Thursday Morning WebAttacks processed CSV.
+
+**Proposed output:** A separate CSV containing every false-negative record, its original attack-family label, predicted label, attack probability, selected suspicious feature values, and flags for negative or missing values.
+
+**Selected features:**
+- `Flow Duration`
+- `Flow Bytes/s`
+- `Flow Packets/s`
+- `Init_Win_bytes_forward`
+
+**Method:** Perform chunked inference using the existing saved model and preprocessing pipeline. Preserve original labels, use the report's feature order, and validate the resulting false-negative count against the existing evaluation report.
+
+**Safeguards:** Do not retrain the model, modify the dataset, or change preprocessing. Keep the existing family-evaluation script unchanged.
+
+**Interpretation limitation:** Associations between suspicious feature values and false negatives do not establish causation.
+
+**Status:** Diagnostic design proposed; implementation pending approval.
+
+### False-Negative Diagnostic Implementation — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+
+**Implementation:**
+- Loads the existing capture-holdout model and source report.
+- Checks the expected capture, feature count, and feature ordering.
+- Processes the held-out capture in chunks.
+- Identifies records whose original label is non-BENIGN and whose prediction is BENIGN.
+- Preserves original labels and records attack probabilities, selected feature values, and negative/missing-value flags.
+- Writes results to `capture_holdout_false_negatives.csv`.
+- Validates scanned row count and false-negative count against the existing report.
+
+**Safeguards:** The script does not retrain the model or alter the source capture. The diagnostic output is separate from the existing evaluation report.
+
+**Status:** Script created; syntax and whitespace checks pending; full diagnostic execution pending.
+
+### False-Negative Diagnostic Initial Checks — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+
+**Initial results:**
+- Python compilation completed without a reported syntax error.
+- `git diff --check` reported trailing whitespace in `docs/research-log.md` at lines 1834 and 1855.
+
+**Required follow-up:**
+- Inspect the diagnostic script's ending to verify that the full file was saved correctly.
+- Remove trailing whitespace from the research log.
+- Rerun the syntax and whitespace checks.
+
+**Constraint:** Do not execute the full diagnostic until the file-integrity and whitespace checks are clean.
+
+**Status:** Initial syntax check passed; file-integrity inspection and whitespace cleanup pending.
+
+### False-Negative Diagnostic Verification — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+
+**Results:**
+- Python syntax compilation passed.
+- The script's ending and entry point were inspected and are intact.
+- `git diff --check` passed after removing trailing whitespace from the research log.
+
+**Conclusion:** The script passes the initial syntax and whitespace checks.
+
+**Next action:** Execute the diagnostic against the held-out capture and verify the scanned row count and false-negative count against the existing evaluation report.
+
+**Status:** Initial verification passed; full diagnostic execution pending.
+
+### False-Negative Diagnostic Execution — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+
+**Action:** Run the diagnostic using the existing capture-holdout model and held-out Thursday Morning WebAttacks capture.
+
+**Expected validation targets:**
+- Scanned rows: 170,366.
+- False-negative records: 2,175.
+
+**Output:** `data/cicids2017/processed/capture_holdout_false_negatives.csv`
+
+**Constraint:** Do not retrain the model or modify the source dataset.
+
+**Status:** Execution requested; actual counts and output validation pending.
+
+### False-Negative Diagnostic Execution Results — 11 October 2026
+
+**Script:** `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+
+**Results:**
+- Capture rows scanned: 170,366.
+- False-negative records extracted: 2,175.
+- Both counts matched the existing capture-holdout report.
+- Output written to `data/cicids2017/processed/capture_holdout_false_negatives.csv`.
+
+**Warning observed:** Scikit-learn emitted warnings that the `SimpleImputer` was fitted without feature names while inference inputs contained feature names. The run completed successfully, but the warning's origin should be investigated before considering the workflow fully clean.
+
+**Interpretation:** The record-level diagnostic reproduced the expected false-negative count. This validates the record count, not the causal explanation for the model's errors.
+
+**Next action:** Inspect the generated CSV's columns, label distribution, and selected feature flags before drawing conclusions about false negatives.
+
+**Status:** Diagnostic completed; count validation passed; warning investigation and output analysis pending.
+
+### False-Negative Feature Summary — 11 October 2026
+
+**Input:** `data/cicids2017/processed/capture_holdout_false_negatives.csv`
+
+**Objective:** Summarize original attack-family labels, suspicious feature flags, selected feature-value ranges, and attack probabilities among the extracted false-negative records.
+
+**Method:** Read the diagnostic CSV and calculate aggregate counts and descriptive statistics without rerunning predictions.
+
+**Constraint:** Read-only analysis; no changes to the model, dataset, or diagnostic output.
+
+**Status:** Summary command prepared; observed results pending.
+
+### False-Negative Feature Summary Results — 11 October 2026
+
+**Input:** `data/cicids2017/processed/capture_holdout_false_negatives.csv`
+
+**Validation:**
+- False-negative records: 2,175.
+- Web Attack Brute Force: 1,507.
+- Web Attack XSS: 649.
+- Web Attack Sql Injection: 19.
+
+**Selected-feature quality findings:**
+- Negative `Flow Duration`: 0 records.
+- Negative `Flow Bytes/s`: 0 records.
+- Negative `Flow Packets/s`: 0 records.
+- Missing `Flow Bytes/s` or `Flow Packets/s`: 0 records.
+- Negative `Init_Win_bytes_forward`: 0 records.
+
+**Attack probability:** Median approximately 0.062761; maximum approximately 0.487569.
+
+**Interpretation:** The selected negative and missing feature-value patterns do not occur in the extracted false-negative records. Therefore, they do not directly explain these errors. The low attack probabilities are consistent with the classifier assigning BENIGN predictions to these attack records.
+
+**Limitation:** This analysis covers only four selected features and the false-negative subset. It does not establish the underlying cause of poor attack recall or exclude other feature-distribution, representation, or model-generalization problems.
+
+**Next action:** Compare selected feature distributions between the held-out BENIGN records and the missed attack families to identify potential areas for further investigation.
+
+**Status:** False-negative feature summary completed; comparative analysis pending.
+
+### BENIGN vs. Missed Brute Force Comparison — 11 October 2026
+
+**Objective:** Compare selected feature distributions between BENIGN records and missed Web Attack Brute Force records in the held-out capture.
+
+**Attack subset:** The 1,507 Brute Force records already identified as false negatives.
+
+**Initial features:** `Destination Port`, `Flow Duration`, `Total Fwd Packets`, `Total Backward Packets`, `Flow Bytes/s`, `Flow Packets/s`, `Packet Length Mean`, and `Init_Win_bytes_forward`.
+
+**Method:** Calculate chunk-based descriptive statistics for the held-out BENIGN group and compare them with the false-negative diagnostic records. Preserve the source data and saved model.
+
+**Interpretation limitation:** Differences between these groups may suggest useful follow-up experiments but do not establish causation or prove that any single feature explains the model's errors.
+
+**Status:** Comparative distribution analysis planned; results pending.
+
+### BENIGN vs. Missed Brute Force Comparison — Execution — 11 October 2026
+
+**Method:** Read the held-out capture in chunks, collect BENIGN feature values, and compare their descriptive distributions with the 1,507 missed Brute Force records.
+
+**Features:** Destination Port, Flow Duration, Total Fwd Packets, Total Backward Packets, Flow Bytes/s, Flow Packets/s, Packet Length Mean, and Init_Win_bytes_forward.
+
+**Statistics:** Median and interquartile range (25th–75th percentiles), with valid observation counts.
+
+**Constraint:** Read-only analysis; no retraining or changes to the source capture.
+
+**Status:** Comparison command prepared; observed distributions pending.
+
+### Feature-Comparison Column Mismatch — 11 October 2026
+
+**Attempted analysis:** Compare BENIGN and missed Brute Force records across eight selected features.
+
+**Observed issue:** The diagnostic CSV contains only the four selected feature values, four flags, capture row, original label, predicted label, and attack probability. It does not contain `Destination Port`, `Total Fwd Packets`, `Total Backward Packets`, or `Packet Length Mean`.
+
+**Cause:** The comparison attempted to select features from the diagnostic CSV that were never exported into it.
+
+**Resolution plan:** Verify the saved diagnostic columns and row identifiers, then retrieve the missing features from the original held-out capture using the recorded capture row numbers.
+
+**Constraint:** Do not alter the source dataset, model, or diagnostic output.
+
+**Status:** Comparison stopped safely; source-row-based feature retrieval pending.
+
+### Diagnostic Row-Identifier Verification — 11 October 2026
+
+**Input:** `data/cicids2017/processed/capture_holdout_false_negatives.csv`
+
+**Results:**
+- Diagnostic records: 2,175.
+- Minimum `Capture_Row`: 12,638.
+- Maximum `Capture_Row`: 93,287.
+- The diagnostic contains only the selected feature values and flags; four features needed for the planned comparison were not exported.
+
+**Interpretation:** The saved row identifiers provide a way to retrieve omitted feature values from the original capture. These identifiers are 1-based data-row positions, excluding the CSV header.
+
+**Next action:** Retrieve the four missing features for the false-negative rows from the original capture, then compare their distributions with the BENIGN group.
+
+**Status:** Diagnostic row identifiers verified; source-feature retrieval pending.
+
+### False-Negative Feature Retrieval and Summary — 11 October 2026
+
+**Objective:** Retrieve four features omitted from the false-negative diagnostic CSV and summarize their values by original attack family.
+
+**Source:** `cleaned_Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv`, matched using the recorded `Capture_Row` identifiers.
+
+**Results:**
+- Successfully retrieved all 2,175 false-negative records.
+- Brute Force: 1,507 records.
+- XSS: 649 records.
+- SQL Injection: 19 records.
+- Destination Port was 80 for all 2,175 records.
+- Median Total Fwd Packets was 3 for Brute Force and XSS.
+- Median Total Backward Packets was 1 for Brute Force and XSS.
+- Median Packet Length Mean was 0 for Brute Force and XSS.
+
+**Interpretation:** The missed records frequently have low packet counts and a Packet Length Mean of zero. These are descriptive observations, not proof of the cause of misclassification. The small SQL Injection sample limits conclusions about that family.
+
+**Next action:** Compare the feature distributions of missed attacks against correctly detected attacks and benign traffic before making causal claims.
+
+**Status:** Source-feature retrieval and descriptive summaries completed.
+
+### Three-Group Feature Comparison Plan — 11 October 2026
+
+**Objective:** Compare missed attacks, detected attacks, and benign traffic in the held-out Thursday Morning WebAttacks capture.
+
+**Groups:**
+1. Missed attacks: actual attack, predicted benign.
+2. Detected attacks: actual attack, predicted attack.
+3. Benign traffic: actual benign, regardless of prediction.
+
+**Features:**
+- Destination Port
+- Flow Duration
+- Total Fwd Packets
+- Total Backward Packets
+- Flow Bytes/s
+- Flow Packets/s
+- Packet Length Mean
+- Init_Win_bytes_forward
+
+**Method:** Use the saved capture-holdout model and original capture labels. Summarize counts, medians, and quartiles for each group. Keep the original data and model unchanged.
+
+**Limitation:** Distribution differences may identify useful hypotheses but cannot establish the cause of false negatives on their own.
+
+**Status:** Comparison plan recorded; implementation pending.
+
+### Three-Group Comparison Script — Syntax Validation — 11 October 2026
+
+**Script:** `ml/evaluation/compare_capture_holdout_prediction_groups.py`
+
+**Validation command:** `python -m py_compile ml/evaluation/compare_capture_holdout_prediction_groups.py`
+
+**Result:** Passed with no syntax errors.
+
+**Planned analysis:** Compare missed attacks, detected attacks, and benign traffic across eight selected features. Use the saved capture-holdout model, process the capture in chunks, and use bounded reservoir samples for feature summaries.
+
+**Integrity constraint:** Do not retrain or modify the model or original capture.
+
+**Status:** Syntax validated; execution pending.
+
+### Three-Group Comparison Execution — 11 October 2026
+
+**Script:** `ml/evaluation/compare_capture_holdout_prediction_groups.py`
+
+**Result:** Execution completed successfully over 170,366 rows.
+
+| Group | Records |
+|---|---:|
+| Missed attacks | 2,175 |
+| Detected attacks | 5 |
+| Benign traffic | 168,186 |
+| **Total** | **170,366** |
+
+The group totals match the previously established evaluation counts.
+
+**Output:** `data/cicids2017/processed/capture_holdout_prediction_group_comparison.json`
+
+**Interpretation:** The grouping reconciles with the existing evaluation. The results confirm that only five of 2,180 attacks were detected in this held-out capture. Feature summaries must be inspected before drawing further conclusions.
+
+**Status:** Comparison completed; feature-summary interpretation pending.
+
+### Three-Group Feature Summary Inspection Plan — 11 October 2026
+
+**Input:** `data/cicids2017/processed/capture_holdout_prediction_group_comparison.json`
+
+**Objective:** Inspect feature summaries for missed attacks, detected attacks, and benign traffic.
+
+**Statistics:** Valid sample count, missing sample count, median, Q25, and Q75.
+
+**Features:** Destination Port, Flow Duration, Total Fwd Packets, Total Backward Packets, Flow Bytes/s, Flow Packets/s, Packet Length Mean, and Init_Win_bytes_forward.
+
+**Method:** Read the existing JSON report and display the saved statistics without rerunning predictions or modifying any files.
+
+**Limitation:** Only five attacks were detected, so comparisons involving that group will be highly uncertain. Differences in descriptive statistics do not establish causation.
+
+**Status:** Inspection plan recorded; report inspection pending.
+
+### Three-Group Feature Summary — Initial Interpretation — 11 October 2026
+
+**Source:** `capture_holdout_prediction_group_comparison.json`
+
+**Observed group sizes:**
+- Missed attacks: 2,175
+- Detected attacks: 5
+- Benign traffic: 168,186, represented by a 100,000-record reservoir sample in the feature summaries.
+
+**Key median comparisons:**
+
+| Feature | Missed attacks | Benign sample |
+|---|---:|---:|
+| Flow Duration | 5,476,931 | 31,173 |
+| Total Fwd Packets | 3 | 2 |
+| Total Backward Packets | 1 | 2 |
+| Flow Bytes/s | 0 | 5,072.30736 |
+| Flow Packets/s | 0.742031326 | 98.80934736 |
+| Packet Length Mean | 0 | 58.6 |
+| Init_Win_bytes_forward | 29,200 | 22 |
+| Destination Port | 80 | 80 |
+
+**Interpretation:** The missed-attack group differs substantially from the benign sample in several feature medians. These differences motivate further investigation but do not establish causation. Feature semantics, source records, and model decision behavior must be examined before drawing conclusions.
+
+**Limitations:** The benign statistics are sample-based, and the detected-attack group contains only five records. The detected group is insufficient for stable population-level conclusions.
+
+**Next action:** Investigate whether the saved model's predictions and feature-processing behavior are consistent with these observed differences.
+
+**Status:** Descriptive comparison interpreted; decision-behavior investigation pending.
+
+### Model Decision-Behavior Investigation Plan — 11 October 2026
+
+**Objective:** Investigate the saved capture-holdout model's decision behavior on the held-out WebAttacks capture.
+
+**Existing evidence:**
+- The model missed 2,175 attacks and detected 5.
+- Missed attacks had substantially different feature medians from the sampled benign group.
+- The missed-attack probabilities had a previously measured mean of approximately 0.0658 and maximum of approximately 0.4876.
+
+**Next checks:**
+1. Inspect the saved classifier's class labels and probability output.
+2. Verify how predicted classes relate to attack probabilities and the classification threshold.
+3. Compare probability distributions for missed attacks, detected attacks, and benign traffic.
+4. Avoid inferring causation from feature summaries alone.
+
+**Integrity constraints:** Do not retrain the model, change the threshold, or modify the source dataset during this diagnostic step.
+
+**Status:** Investigation plan recorded; model decision diagnostics pending.
+
+### Saved Model Probability Diagnostics — 11 October 2026
+
+**Model:** `binary_random_forest_capture_holdout.joblib`
+
+**Configuration observed:**
+- Classifier: RandomForestClassifier
+- Trees: 100
+- Maximum depth: 20
+- Minimum samples per leaf: 2
+- Input features: 77
+- Class labels: `[0, 1]`
+- Pipeline steps: median imputer and random forest classifier
+
+**Missed-attack probability results:**
+- Records: 2,175
+- Mean attack probability: 0.065765
+- Median: 0.062761
+- 90th percentile: 0.067761
+- 95th percentile: 0.150601
+- 99th percentile: 0.230617
+- Maximum: 0.487569
+- Records with probability at least 0.50: 0
+- Records with probability at least 0.10: 142
+- Records with probability at least 0.01: 2,154
+
+**Interpretation:** All missed attacks received attack probabilities below 0.50 and were classified as benign. Most have relatively low predicted attack probabilities. Threshold changes have not been tested and could increase false positives.
+
+**Next action:** Inspect the training code to verify the binary label mapping and probability-column interpretation before any threshold analysis.
+
+**Status:** Probability diagnostics completed; label-mapping verification pending.
+### Binary Label Mapping Verification Plan — 11 October 2026
+
+**Objective:** Confirm how the capture-holdout training script maps original CIC-IDS2017 labels to binary classes.
+
+**Questions to verify:**
+1. Is `BENIGN` mapped to class `0`?
+2. Are all non-`BENIGN` labels mapped to class `1`?
+3. Does the training script use the same feature order documented in the saved evaluation report?
+4. How does the training pipeline handle non-finite feature values?
+
+**Method:** Read the existing training script without modifying it or retraining the model.
+
+**Status:** Verification plan recorded; source inspection pending.
+
+### Binary Label Mapping and Preprocessing Verification — 11 October 2026
+
+**Source inspected:** `ml/training/train_binary_capture_holdout.py`
+
+**Verified findings:**
+- `BENIGN` is mapped to class `0`.
+- All non-`BENIGN` labels are mapped to class `1`.
+- The training script validates feature names and order across training and held-out captures.
+- Exactly 77 input features are expected.
+- Numeric conversion is applied to feature columns.
+- Positive and negative infinity are replaced with missing values.
+- A median `SimpleImputer` and `RandomForestClassifier` are used in the saved pipeline.
+- The evaluation report records confusion-matrix labels as `BENIGN`, `ATTACK`.
+
+**Interpretation:** The training source supports the expected binary label mapping. The absent `attack_label` field in the report does not, by itself, indicate a model-label error.
+
+**Next action:** Inspect the training script's sampling and class-distribution details to determine how representative the 300,000-row training sample was.
+
+**Status:** Label mapping and preprocessing verified; training-sample investigation pending.
+
+### Training-Sample Sampling Method Review — 11 October 2026
+
+**Source:** `ml/training/train_binary_capture_holdout.py`
+
+**Verified configuration:**
+- Four eligible training captures.
+- 1,957,132 eligible source rows.
+- 300,000-row training sample.
+- NumPy random generator seed: 42.
+- Global key-based random sampling retains the 300,000 lowest random keys.
+- Random Forest: 100 trees, maximum depth 20, minimum leaf size 2.
+- `class_weight=None`; no explicit class weighting is applied.
+- Median imputation is included in the training pipeline.
+
+**Interpretation:** The sample is selected globally rather than through explicit class or attack-family stratification. Rare-family representation is not guaranteed by the sampling method.
+
+**Limitation:** The sampling method alone does not establish the actual class balance or prove that any attack family was absent from the sample.
+
+**Next action:** Inspect the saved evaluation report's eligible-source and training-sample class counts.
+
+**Status:** Sampling method reviewed; saved class-count verification pending.
+
+### Training Class-Balance Verification — 11 October 2026
+
+**Source:** `binary_capture_holdout_report.json`
+
+| Dataset | BENIGN | ATTACK |
+|---|---:|---:|
+| Eligible training source | 86.3809% | 13.6191% |
+| Training sample | 86.4303% | 13.5697% |
+| Held-out capture | 98.7204% | 1.2796% |
+
+**Counts:**
+- Eligible training source: 1,957,132 rows.
+- Training sample: 300,000 rows, including 40,709 attacks.
+- Held-out capture: 170,366 rows, including 2,180 attacks.
+
+**Interpretation:** The sampled training data closely matches the eligible source's overall binary class proportions. The observed evaluation failure cannot be attributed to a substantial distortion of the overall binary class balance based on these counts alone.
+
+**Limitation:** Binary counts do not establish whether individual attack families are adequately represented in training. The held-out capture's different class proportions also do not, by themselves, explain the low attack recall.
+
+**Next action:** Investigate attack-family coverage in the eligible training captures and compare it with the held-out WebAttacks families.
+
+**Status:** Binary class balance verified; family-level coverage investigation pending.
+
+### Attack-Family Coverage Inspection Plan — 11 October 2026
+
+**Objective:** Inventory the original attack labels in the eligible training captures and compare them with the held-out WebAttacks capture.
+
+**Eligible training captures:**
+- Monday Working Hours
+- Tuesday Working Hours
+- Wednesday Working Hours
+- Thursday Afternoon Infiltration
+
+**Held-out capture:** Thursday Morning WebAttacks.
+
+**Method:** Read the original `Label` column from each processed capture, count records by original label, and distinguish BENIGN from individual attack families. Do not train a model or modify any dataset.
+
+**Questions:**
+1. Which attack families occur in the eligible training captures?
+2. Are Web Attack Brute Force, Web Attack XSS, and Web Attack Sql Injection present in training?
+3. How many records of each held-out attack family are available in the training captures?
+
+**Limitation:** Label presence alone does not establish that the model learned a useful decision boundary for a family.
+
+**Status:** Coverage inspection planned; label inventory pending.
+
+### Attack-Family Coverage Results — 11 October 2026
+
+**Method:** Count original labels in the four eligible training captures and the held-out Thursday Morning WebAttacks capture.
+
+**Results:**
+
+| Attack family | Eligible training records | Held-out records |
+|---|---:|---:|
+| Web Attack Brute Force | 0 | 1,507 |
+| Web Attack XSS | 0 | 652 |
+| Web Attack Sql Injection | 0 | 21 |
+| **Total held-out attacks** | **0** | **2,180** |
+
+The eligible training captures contain BENIGN traffic and the following attack families: FTP-Patator, SSH-Patator, DoS GoldenEye, DoS Hulk, DoS Slowhttptest, DoS slowloris, Heartbleed, and Infiltration.
+
+**Interpretation:** All three attack families in the held-out capture are absent from the eligible training captures. The experiment therefore evaluates generalization to unseen attack families, rather than ordinary recognition of these known families.
+
+The model detected 5 of 2,180 held-out attacks. The absence of these families from training is a plausible major contributor to the poor recall, but this experiment alone does not establish causation.
+
+**Research implication:** Evaluate known-family and unseen-family detection separately when assessing the proposed intrusion prevention system.
+
+**Status:** Attack-family coverage verified; experimental follow-up pending.
+
+### Controlled Known-Family Follow-Up Experiment — 11 October 2026
+
+**Objective:** Investigate whether poor performance is associated with evaluating attack families that were absent from training.
+
+**Existing baseline:** The model was trained on eligible captures containing BENIGN traffic and eight attack families. The held-out Thursday Morning WebAttacks capture contains three attack families absent from training, with 2,180 attack records in total.
+
+**Proposed comparison:**
+1. Retain the existing unseen-family evaluation as the baseline.
+2. Evaluate the saved model on a separate capture containing attack families represented in the training data.
+3. Report attack-family counts, precision, recall, F1-score, false positives, and false negatives.
+4. Keep the existing model, baseline report, and held-out capture unchanged.
+5. Clearly distinguish differences between captures from differences caused by attack-family familiarity.
+
+**Candidate known-family captures:** Tuesday Working Hours (FTP-Patator and SSH-Patator), Wednesday Working Hours (DoS families and Heartbleed), and Thursday Afternoon Infiltration (Infiltration).
+
+**Important limitation:** These captures were used for training, so evaluating on them would measure performance on familiar training data rather than provide an independent generalization test. A valid known-family generalization test requires a separate split or capture with the same families excluded from model fitting.
+
+**Next action:** Inspect the original label counts and capture boundaries to choose a defensible evaluation design before running another experiment.
+
+**Status:** Follow-up experiment planned; evaluation design pending.
+
+### Evaluation Design Decision — 11 October 2026
+
+**Decision:** Do not evaluate the existing model on its own training records as evidence of generalization.
+
+**Reason:** The current model was fitted on a sample of 300,000 records drawn from four eligible captures. Performance on those same records would be an in-sample measurement and could overstate performance on unseen traffic.
+
+**Preferred design:** Identify a separate capture or partition containing attack families represented during training, while ensuring the evaluated records were excluded from model fitting.
+
+**Controls:**
+- Preserve the existing unseen-family baseline.
+- Keep training and evaluation records disjoint.
+- Verify family presence and record counts before fitting or evaluating.
+- Report per-family precision, recall, F1-score, false positives, and false negatives where applicable.
+- Do not interpret differences between captures as a causal effect of family familiarity without controlling for other differences.
+
+**Status:** Evaluation-design principles recorded; dataset-split inspection pending.
+
+### Candidate Known-Family Evaluation Split — 11 October 2026
+
+**Inspection results:**
+- The existing baseline trains on Monday, Tuesday, Wednesday, and Thursday Afternoon Infiltration captures.
+- Thursday Morning WebAttacks is the current held-out capture.
+- Eight processed capture files are available.
+- Existing evaluation scripts include `evaluate_binary_by_capture.py` and `evaluate_capture_holdout_by_family.py`.
+
+**Candidate:** Friday PortScan capture, which contains BENIGN and PortScan records.
+
+**Reason for consideration:** PortScan is a different attack family from the three Web Attack families in the current held-out capture.
+
+**Important limitation:** The existing baseline training configuration does not include Friday PortScan, so evaluating that capture with the unchanged baseline would test another unseen-family case, not known-family generalization. A separate model and carefully defined split would be needed to test PortScan as a known family without evaluating on its training records.
+
+**Next action:** Inspect the existing capture-level evaluation script and report to determine what comparisons are already supported.
+
+**Status:** Candidate identified; evaluation design not yet finalized.
+
+
+### Existing Capture-Level Evaluation Script Review — 11 October 2026
+
+**Source:** `ml/evaluation/evaluate_binary_by_capture.py`
+
+**Verified findings:**
+- The script loads `ml/models/binary_random_forest.joblib`.
+- It evaluates Friday Morning, Friday DDoS, and Friday PortScan captures.
+- It reports binary BENIGN/ATTACK metrics and original source-label counts.
+- It writes results to `binary_capture_evaluation.json`.
+- The script does not itself establish whether the evaluation captures overlap with the model's training data.
+
+**Important distinction:** The current unseen-WebAttacks baseline uses `binary_random_forest_capture_holdout.joblib`. The existing capture-level script loads a different model. Its results must not be attributed to the current baseline without verifying the other model's provenance.
+
+**Next action:** Check whether the older model and its evaluation report exist, then inspect available provenance before relying on those results.
+
+**Status:** Script reviewed; model provenance verification pending.
+
+### Model Artifact and Report Inventory — 11 October 2026
+
+**Objective:** Verify the existence of the older binary model and its capture-level evaluation report before relying on their results.
+
+**Artifacts to check:**
+- `ml/models/binary_random_forest.joblib`
+- `ml/models/binary_random_forest_capture_holdout.joblib`
+- `data/cicids2017/processed/binary_capture_evaluation.json`
+- `data/cicids2017/processed/binary_capture_holdout_report.json`
+
+**Method:** List matching artifacts and inspect Git working-tree status. Do not load, retrain, overwrite, or delete any model.
+
+**Status:** Artifact inventory pending.
+
+### Model Artifact Inventory Results — 11 October 2026
+
+**Model artifacts found:**
+- `binary_random_forest.joblib`
+- `binary_random_forest_capture_holdout.joblib`
+- `binary_random_forest_validation.joblib`
+
+**Evaluation reports found:**
+- `binary_capture_evaluation.json`
+- `binary_capture_holdout_report.json`
+
+**Git status:** `docs/research-log.md` is modified, and four evaluation scripts are untracked.
+
+**Interpretation:** The older model and capture-level report are available for inspection. Their existence does not establish which data were used to train the older model or whether its Friday evaluation captures were excluded from training.
+
+**Next action:** Inspect the older model's saved report and training metadata to establish its provenance before interpreting its evaluation results.
+
+**Status:** Artifact inventory completed; older model provenance pending.
+
+### Older Model Capture-Level Results — 11 October 2026
+
+**Source:** `data/cicids2017/processed/binary_capture_evaluation.json`
+
+| Capture | Attack family | Attack records | Detected attacks | Attack recall |
+|---|---|---:|---:|---:|
+| Friday Morning | Bot | 1,966 | 0 | 0.00% |
+| Friday Afternoon DDoS | DDoS | 128,027 | 81,248 | 63.46% |
+| Friday Afternoon PortScan | PortScan | 158,930 | 157 | 0.10% |
+
+**Interpretation:** The older model's reported attack recall varies substantially across these three captures. DDoS recall is considerably higher than Bot and PortScan recall.
+
+**Limitation:** The report does not establish which data were used to train `binary_random_forest.joblib`. These results cannot be assumed to represent independent generalization performance, and they must not be attributed to the newer capture-holdout model.
+
+**Next action:** Inspect Git history and available training scripts to determine whether the older model's provenance can be established.
+
+**Status:** Older-model report interpreted; provenance verification pending.
+
+
+### Older Model Provenance Investigation — 11 October 2026
+
+**Repository inspection results:**
+- Training scripts available: `train_binary_classifier.py`, `train_binary_validation.py`, and `train_binary_capture_holdout.py`.
+- `train_binary_classifier.py` explicitly saves `ml/models/binary_random_forest.joblib`.
+- The repository history contains no recorded commits for the older model artifact itself.
+- Git history is available for the training scripts.
+
+**Interpretation:** The older model's generating script has been identified, but the model artifact's exact training run and dataset provenance remain unverified.
+
+**Next action:** Inspect `train_binary_classifier.py` to establish its configured input data, preprocessing, sampling, and model settings.
+
+**Status:** Generating script identified; provenance investigation continues.
+
+
+### Older Model Training Configuration Review — 11 October 2026
+
+**Source:** `ml/training/train_binary_classifier.py`
+
+**Training captures:**
+- Monday Working Hours
+- Tuesday Working Hours
+- Wednesday Working Hours
+- Thursday Afternoon Infiltration
+- Thursday Morning WebAttacks
+
+**Evaluation captures:**
+- Friday Morning
+- Friday Afternoon DDoS
+- Friday Afternoon PortScan
+
+**Training configuration:**
+- Random sample: 300,000 rows
+- Random seed: 42
+- Binary labels: BENIGN = 0; non-BENIGN = 1
+- Random Forest: 100 trees, maximum depth 20, minimum leaf size 2
+- Median imputation fitted on the training sample
+
+**Interpretation:** The source code specifies Thursday Morning WebAttacks as training data for the older model, whereas the newer capture-holdout experiment explicitly excludes that capture from training. The older model's Friday evaluation is capture-separated according to its configuration, but its exact historical training run cannot be proven from the source file alone.
+
+**Status:** Older model's intended training and evaluation configuration documented; historical artifact provenance remains partly unverified.
+
+### Next Research Direction — 11 October 2026
+
+**Decision:** Prioritize a controlled evaluation design before modifying the existing model or introducing blockchain integration.
+
+**Rationale:**
+- The unseen-WebAttacks baseline has extremely low attack recall.
+- The older model's Friday evaluation shows substantial variation across attack families.
+- The models use different training-capture configurations, so their results cannot isolate the effect of attack-family familiarity.
+
+**Preferred next experiment:** Design a reproducible, family-aware train/test split that excludes evaluation records from model fitting and records family-level support in both partitions. Preserve the current model and report as the baseline.
+
+**Evaluation requirements:**
+- Document which attack families appear in each partition.
+- Prevent overlap between training and test records.
+- Report binary and per-family precision, recall, F1-score, false positives, and false negatives.
+- Keep model artifacts and reports separate from the existing baseline.
+- Treat any performance improvement as an experimental result, not proof of causation unless competing explanations are controlled.
+
+**Status:** Research direction selected; split design and implementation pending.
+
+### Known-Family Evaluation Design — 11 October 2026
+
+**Objective:** Establish a controlled record-level baseline for attack families represented in both training and test partitions.
+
+**Proposed design:**
+1. Use the eligible Monday, Tuesday, Wednesday, and Thursday Afternoon Infiltration captures.
+2. Retain the original multiclass `Label` temporarily for partitioning and family-level reporting; derive the binary target separately (`BENIGN = 0`, non-BENIGN = 1).
+3. Inspect exact duplicate rows before splitting and document the chosen duplicate-handling policy to reduce the risk of identical records appearing in both partitions.
+4. Create a reproducible 80/20 train/test split, stratified by the original attack-family label where the label counts permit it.
+5. Fit preprocessing and the model using training data only. Do not use the test partition for fitting, feature selection, threshold selection, or model tuning.
+6. Preserve the existing baseline artifacts. Store the new model, configuration, predictions, and report under separate filenames.
+7. Report binary metrics and per-family support, precision, recall, F1-score, false positives, and false negatives.
+
+**Interpretation limits:**
+- This is a record-level split, not a capture-separated or time-separated test.
+- Records from the same capture may share capture-specific characteristics, so results may overestimate performance on genuinely new traffic.
+- Rare families may have too few distinct records for stable estimates; report their support and limitations.
+- Compare this result with the unseen-family baseline as a difference in evaluation setting, not as a controlled causal comparison.
+
+**Status:** Experimental design proposed; duplicate inspection, split implementation, and evaluation pending.
+
+### Duplicate-Record Inspection Plan — 11 October 2026
+
+**Objective:** Assess the risk of duplicate records crossing the proposed record-level train/test boundary.
+
+**Scope:**
+- Monday Working Hours
+- Tuesday Working Hours
+- Wednesday Working Hours
+- Thursday Afternoon Infiltration
+
+**Inspection procedure:**
+1. Count exact duplicate feature rows within each capture.
+2. Count exact duplicate feature rows across the four captures.
+3. Inspect whether duplicate rows have conflicting original attack-family labels.
+4. Distinguish duplicate feature vectors from duplicate complete records, including labels.
+5. Do not delete, modify, or overwrite source datasets during this inspection.
+
+**Decision criteria:**
+- If exact duplicates exist, document their frequency and label consistency before selecting a splitting strategy.
+- Avoid placing identical feature records in both partitions where practical.
+- Preserve rare attack families and document any limitations that prevent a clean split.
+
+**Limitations:** Exact row equality does not establish that two network flows are the same real-world event. Conversely, records representing similar flows may differ slightly and evade exact-duplicate checks.
+
+**Status:** Inspection planned; execution and results pending.
+
+### Duplicate Inspection Results — 11 October 2026
+
+**Dataset scope:** Four eligible captures; 1,957,132 total rows.
+
+| Capture | Rows | Repeated feature rows | Repeated complete rows |
+|---|---:|---:|---:|
+| Monday Working Hours | 529,918 | 26,935 | 26,935 |
+| Tuesday Working Hours | 445,909 | 24,065 | 24,065 |
+| Wednesday Working Hours | 692,703 | 81,957 | 81,909 |
+| Thursday Afternoon Infiltration | 288,602 | 35,630 | 35,630 |
+| **Combined** | **1,957,132** | **186,158** | **186,049** |
+
+Additional hash-based results:
+- Distinct feature patterns reported in multiple captures: 15,384.
+- Feature patterns reported with multiple labels: 72.
+- Source files were not modified.
+
+**Interpretation:** Repeated feature rows are common enough to warrant explicit handling before a record-level split. The 72 reported label conflicts require a more precise audit because the initial cross-capture aggregation can hide conflicts within an individual capture. Hash equality alone is not proof that records represent the same underlying network event.
+
+**Next action:** Audit feature-pattern/label conflicts within and across captures, verify the conflicting groups against actual feature values, and then select a reproducible splitting policy.
+
+**Status:** Initial duplicate screening complete; conflict audit pending.
+
+### Label-Conflict Audit Results — 11 October 2026
+
+The second hash-based audit processed the four eligible captures, totaling 1,957,132 rows.
+
+Results:
+- Distinct feature hashes: 1,770,974.
+- Hashes associated with multiple original labels: 109.
+- Conflicting hashes confined to one capture: 35.
+- Conflicting hashes spanning multiple captures: 74.
+- Example conflicts include `BENIGN` and `DoS Hulk`; one reported hash occurs 3,361 times.
+
+The earlier audit reported 72 conflicts because it deduplicated feature-hash/capture pairs before checking labels, potentially hiding conflicts within captures.
+
+**Interpretation:** Feature-pattern/label ambiguity must be investigated before choosing the split policy. These counts are preliminary because hash equality does not prove exact feature-vector equality.
+
+**Next action:** Verify candidate conflicts by comparing the actual feature values, then quantify confirmed conflicting records and determine how they should be handled during evaluation.
+
+**Status:** Hash-based conflict candidates identified; exact-value verification pending.
+
+### Exact Feature-Vector Conflict Verification — 11 October 2026
+
+The numeric feature-vector audit processed all 1,957,132 rows from the four eligible captures.
+
+Results:
+- Distinct exact numeric feature vectors: 1,772,172.
+- Feature vectors associated with multiple original labels: 108.
+- Conflicts confined to one capture: 35.
+- Conflicts spanning multiple captures: 73.
+
+The inspected examples primarily associate `BENIGN` and `DoS Hulk` with identical numeric feature vectors. One reported feature vector occurred 3,361 times.
+
+**Interpretation:** These conflicts persist after comparing actual numeric feature values, rather than relying solely on hash equality. They show that some feature vectors are associated with inconsistent original labels. They do not establish that the corresponding records represent the same real-world network flow.
+
+**Proposed split policy:** Keep the original dataset unchanged. For the controlled record-level experiment, assign identical feature vectors to a single partition so exact feature matches cannot cross the train/test boundary. Preserve original labels and report conflicting-label support separately. Do not silently relabel or discard conflicting observations.
+
+**Limitation:** Grouping exact feature vectors prevents exact-vector overlap but does not prevent leakage from near-duplicate flows or shared capture conditions.
+
+**Status:** Numeric feature conflicts verified; implementation of a grouped split pending.
+
+### Grouped Train/Test Split Design — 11 October 2026
+
+**Objective:** Design a reproducible known-family evaluation that prevents exact numeric feature-vector groups from crossing the train/test boundary.
+
+**Proposed approach:**
+1. Keep the original four source captures unchanged.
+2. Preserve the original `Label` column and derive the binary target separately.
+3. Assign identical numeric feature vectors to the same group.
+4. Use a deterministic grouped partition with a fixed random seed and an approximate 80/20 target split.
+5. Verify that no exact feature-vector group occurs in both partitions.
+6. Check original attack-family coverage and class counts in each partition before fitting the model.
+7. If the partition omits a family or creates an unusable class distribution, revise the partitioning approach before training.
+8. Fit the imputer and classifier using training records only.
+9. Keep model artifacts, predictions, and evaluation reports separate from existing baselines.
+
+**Technical limitation:** A grouped random split does not inherently guarantee stratification by attack family. The actual partition must be validated. Rare families and conflicting-label groups may prevent a clean, balanced split.
+
+**Leakage limitation:** This design prevents exact numeric feature-vector overlap, but does not prevent near-duplicate flows or shared capture-specific characteristics from crossing partitions.
+
+**Status:** Grouping and validation requirements defined; implementation pending.
+
+### Splitter Selection — 11 October 2026
+
+Environment verified:
+- scikit-learn: 1.9.1
+- `GroupShuffleSplit`: available
+- `StratifiedGroupKFold`: available
+
+**Selected candidate:** `StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)`.
+
+**Grouping variable:** Exact numeric feature-vector identity.
+
+**Stratification target:** Original multiclass attack-family `Label`, not the derived binary target.
+
+**Reason:** This splitter attempts to preserve label proportions while keeping groups intact. Unlike a standard random grouped split, it explicitly considers class proportions.
+
+**Validation required before model fitting:**
+1. Confirm that no feature-vector group crosses the train/test boundary.
+2. Compare family counts and proportions across all five folds.
+3. Identify rare or missing families and inspect the 108 verified conflicting-label feature vectors.
+4. Record the actual training/test sizes and class distributions for the selected fold.
+
+**Limitation:** Stratification is an optimization goal, not a guarantee. Group constraints and conflicting labels may prevent a balanced split.
+
+**Status:** Splitter candidate selected; implementation and fold validation pending.
+
+### Grouped Split Validator — Initial Code Review — 11 October 2026
+
+**Script:** `ml/evaluation/validate_grouped_capture_split.py`
+
+**Validation performed:** Python syntax compilation passed.
+
+**Issues identified before execution:**
+1. The implementation constructs and retains Python tuples for all feature rows, which may consume excessive memory on the 1,957,132-row dataset under the 7 GB WSL memory limit.
+2. Missing numeric values require explicit canonicalization before exact feature-vector grouping.
+3. The group-level label-conflict summary is recomputed inside each fold and should be calculated once.
+4. The full-dataset memory requirement has not been measured.
+
+**Decision:** Do not execute the current implementation on the full dataset. Optimize grouping and conflict validation first, then review the revised script before execution.
+
+**Status:** Syntax validated; memory efficiency and missing-value handling require revision. No model was trained and no source datasets were modified.
+
+### Grouped Split Validator — Memory Optimization Plan — 11 October 2026
+
+**Objective:** Reduce memory overhead while preserving correct exact-feature grouping.
+
+**Planned changes:**
+1. Normalize numeric features consistently, including missing values and signed zero.
+2. Use compact numeric representations and integer group identifiers instead of retaining a Python tuple for every row.
+3. Use hashes only to identify candidate matches; resolve collisions using exact normalized feature values.
+4. Calculate conflicting-label group information once rather than repeating it for each fold.
+5. Report group overlap and family coverage for every fold.
+6. Review the revised implementation before running it against the complete dataset.
+
+**Constraints:**
+- Keep source CSV files and existing model artifacts unchanged.
+- Do not train a model during split validation.
+- Do not assume the revised implementation will fit within the 7 GB WSL memory limit without testing.
+- Preserve reproducibility with five folds and random seed 42.
+
+**Status:** Memory optimization planned; revised implementation and execution pending.
+
+### Revised Grouped Split Validator — Syntax Check — 11 October 2026
+
+**Script:** `ml/evaluation/validate_grouped_capture_split.py`
+
+**Result:** `python -m py_compile` completed successfully.
+
+**Implementation review:**
+- Uses numeric feature arrays and normalizes infinities and signed zero.
+- Handles missing values during exact feature comparisons.
+- Calculates conflicting-label groups once.
+- Uses grouped, stratified five-fold splitting with seed 42.
+- Resolves hash collisions through feature-value comparisons.
+
+**Remaining concern:** Individual row comparisons within large hash buckets may be computationally expensive. Runtime and peak memory have not been measured.
+
+**Decision:** Do not run the full-dataset validator yet. Optimize repeated-row grouping and review the revised algorithm before execution.
+
+**Status:** Syntax validated; performance review pending. No model trained and no source datasets modified.
+
+### Grouping Algorithm Optimization — 11 October 2026
+
+**Objective:** Reduce the computational cost of exact feature-vector grouping.
+
+**Planned change:**
+- Group rows by their hash values.
+- Within each bucket, identify unique normalized feature rows using vectorized operations where practical.
+- Assign one integer group ID to each distinct feature vector.
+- Map repeated occurrences back to the same group ID.
+- Preserve consistent handling of missing numeric values and signed zero.
+- Continue resolving hash collisions using actual feature values rather than assuming hash equality means vector equality.
+
+**Validation requirements:**
+- Confirm repeated feature vectors receive identical group IDs.
+- Confirm different vectors in the same hash bucket remain separate.
+- Confirm conflicting-label groups are preserved and reported.
+- Check memory and runtime before processing the complete dataset.
+
+**Status:** Optimization approach documented; implementation and validation pending.
+
+### Grouping Optimization Syntax Check — 11 October 2026
+
+**Script:** `ml/evaluation/validate_grouped_capture_split.py`
+
+**Result:** Python syntax compilation passed after replacing the row-by-row hash-bucket comparison with vectorized `numpy.unique` grouping.
+
+**Remaining validation:**
+- Verify repeated rows receive the same group ID.
+- Verify different feature vectors are not merged.
+- Verify missing values are grouped consistently.
+- Verify hash collisions cannot merge distinct vectors.
+- Measure resource use before running the full dataset.
+
+**Decision:** Test the grouping logic on a small synthetic dataset before running full-dataset validation.
+
+**Status:** Syntax validated; functional tests pending. No model trained and no source datasets modified.
+
+### Synthetic Feature-Grouping Test — 11 October 2026
+
+**Test:** Five synthetic feature rows, including duplicate rows, matching missing-value patterns, and a distinct feature vector.
+
+**Results:**
+- Input rows: 5.
+- Unique groups: 3.
+- Identical rows received matching group IDs.
+- Rows with matching missing-value positions were grouped consistently.
+- Distinct feature vectors remained separate.
+- All assertions passed.
+
+**Interpretation:** The tested `numpy.unique` grouping operation behaves as expected for these synthetic cases.
+
+**Limitations:** This test does not validate hash-collision handling, the complete validator, cross-capture grouping, fold stratification, or full-dataset memory usage.
+
+**Status:** Synthetic grouping test passed; full-validator validation remains pending.
+
+### Integrated Grouped Validator Review — 11 October 2026
+
+**Files reviewed:**
+- `ml/evaluation/validate_grouped_capture_split.py`
+- Current Git working-tree status
+
+**Findings:**
+- The script integrates numeric normalization, hash-bucket grouping, conflicting-label analysis, and five-fold stratified grouped splitting.
+- Syntax compilation and the small synthetic grouping test passed.
+- The full implementation has not been executed on the dataset.
+- Large duplicate buckets may create substantial temporary memory allocations.
+- Group overlap is reported but should also be enforced as a validation assertion.
+- Capture membership is loaded but not yet summarized for each fold.
+
+**Decision:** Do not run the current validator on the full dataset. Address resource usage and strengthen validation checks first.
+
+**Repository status:** The research log is modified; the validator and four diagnostic scripts are untracked. No commit or push was performed.
+
+**Status:** Integrated code reviewed; further revisions required before execution.
+
+### Grouped Validator Resource and Assertion Improvements — 11 October 2026
+
+**Objective:** Make the grouped split validator more resource-conscious and strengthen its correctness checks.
+
+**Required changes:**
+1. Reduce unnecessary copies of the full dataset and intermediate arrays.
+2. Normalize missing numeric values and signed zero consistently.
+3. Preserve exact feature-vector equality when assigning group IDs; hash equality alone must not determine group identity.
+4. Calculate conflicting-label groups once.
+5. Assert that train/test feature-group overlap is zero for every fold.
+6. Report per-capture train/test membership alongside original-label distributions.
+7. Review the revised implementation before full-dataset execution.
+
+**Constraints:** Do not modify source datasets, retrain the existing model, or overwrite existing reports during validation.
+
+**Status:** Improvements
+
+### GitHub Research Checkpoint — 11 October 2026
+
+**Objective:** Preserve the current research and evaluation work in the GitHub repository before pausing development.
+
+**Planned files:**
+- `docs/research-log.md`
+- `ml/evaluation/compare_capture_feature_distributions.py`
+- `ml/evaluation/compare_capture_holdout_prediction_groups.py`
+- `ml/evaluation/inspect_capture_holdout_false_negatives.py`
+- `ml/evaluation/inventory_capture_label_overlap.py`
+- `ml/evaluation/validate_grouped_capture_split.py`
+
+**Pre-push requirements:**
+1. Review the working-tree changes and intended files.
+2. Run syntax checks on the Python evaluation scripts.
+3. Check for whitespace errors and accidental sensitive or generated files.
+4. Stage only the intended code and documentation.
+5. Commit and push to the configured GitHub remote.
+6. Verify the commit and synchronization status.
+
+**Restrictions:** Do not commit processed datasets, trained model artifacts, generated evaluation outputs, credentials, or unrelated files.
+
+**Status:** GitHub checkpoint planned; review, commit, and push pending.
+
+### README Revision and GitHub Checkpoint — 11 October 2026
+
+**Objective:** Update the project README to provide an accurate overview of the decentralized, self-learning Intrusion Prevention System and prepare the current research work for GitHub.
+
+**Planned README sections:**
+- Project overview and objectives
+- Planned architecture and technology stack
+- Repository structure
+- Ubuntu WSL2 and Python environment setup
+- CIC-IDS2017 dataset and preprocessing
+- Security and isolated-lab testing scope
+- Development roadmap
+- Research-log reference
+- License and dataset attribution
+
+**Documentation requirements:**
+- Clearly distinguish implemented functionality from planned components.
+- Do not claim that Suricata integration, automated prevention, anomaly detection, or Hyperledger Fabric auditing is operational unless verified.
+- Keep datasets, trained models, generated evaluation outputs, and credentials out of Git.
+- Preserve the existing research history and document experimental limitations accurately.
+
+**GitHub checkpoint:** Review the README, research log, and intended evaluation scripts; run checks; stage only approved files; commit and push; verify repository synchronization.
+
+**Status:** README revision and GitHub checkpoint pending.
+
+### Pre-Push Syntax Check — 11 October 2026
+
+**Validation performed:** Python syntax compilation for five evaluation scripts.
+
+Scripts checked:
+- `compare_capture_feature_distributions.py`
+- `compare_capture_holdout_prediction_groups.py`
+- `inspect_capture_holdout_false_negatives.py`
+- `inventory_capture_label_overlap.py`
+- `validate_grouped_capture_split.py`
+
+**Result:** All five scripts compiled successfully.
+
+**Limitations:** Syntax compilation does not verify runtime behavior, evaluation correctness, memory usage, or model performance. The grouped split validator has not been run on the complete dataset.
+
+**Next action:** Verify Git working-tree status, whitespace checks, and the intended README and research-log changes before staging files.
+
+**Status:** Syntax check passed; pre-push review continues.
+
+### Git Pre-Push Review — 11 October 2026
+
+**Review results:**
+- Confirmed the Git remote is `origin`, pointing to the project GitHub repository.
+- Confirmed the current branch is `main`.
+- Confirmed `README.md` and `docs/research-log.md` contain local changes.
+- Identified five new evaluation scripts intended for review before staging.
+- Confirmed the generated capture-holdout report and trained model are ignored by Git.
+- `git diff --check` reported an extra blank line at the end of `docs/research-log.md`.
+
+**Next action:** Remove the trailing blank line, rerun whitespace checks, review the final staged changes, and then commit and push the intended files.
+
+**Status:** Review in progress; no new commit or push has been performed.
+
+### Pre-Commit Verification — 11 October 2026
+
+**Files staged:** Seven intended files: the README, research log, and five evaluation scripts.
+
+**Checks completed:**
+- `git diff --exit-code` passed; no unstaged changes remained.
+- `git diff --cached --check` passed with no whitespace errors.
+- Reviewed staged filenames and change summary.
+- No dataset or trained-model artifacts were included in the staged file list.
+
+**Next action:** Commit the reviewed changes to the `main` branch, push to the configured GitHub remote, and verify the resulting repository state.
+
+**Status:** Pre-commit checks passed; commit and push are pending.
+
+### Research Checkpoint Commit — 11 October 2026
+
+**Commit:** `fa95c3a`  
+**Message:** `Document research progress and add evaluation diagnostics`
+
+The commit includes seven files:
+- Updated `README.md`
+- Updated `docs/research-log.md`
+- `compare_capture_feature_distributions.py`
+- `compare_capture_holdout_prediction_groups.py`
+- `inspect_capture_holdout_false_negatives.py`
+- `inventory_capture_label_overlap.py`
+- `validate_grouped_capture_split.py`
+
+The staged whitespace check passed before the commit. The five evaluation scripts passed Python syntax compilation. The grouped capture-split validator remains subject to further memory and correctness validation before full-dataset execution.
+
+**Next action:** Push the commit to the configured GitHub remote and verify synchronization.
+
+**Status:** Local commit created; remote push pending.
+
