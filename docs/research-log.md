@@ -992,3 +992,155 @@ These values agree with the formulas implemented in the staged capture-holdout s
 
 No model retraining or tuning was performed.
 
+### Repository Checkpoint — Binary Feature-Shift Diagnostic — 11 October 2026
+
+The current project changes were committed and pushed successfully to the GitHub repository `Ak7865/immunet-ips`.
+
+- Commit: `ddce58e`
+- Branch: `main`
+- Commit message: `Add binary feature shift diagnostics and document evaluation`
+- Push result: successful; local `main` and `origin/main` point to the same commit.
+- Working tree: clean at the time of verification.
+
+The commit includes the research-log updates, the new binary feature-shift diagnostic script, a minor cleanup in the prediction-confidence inspection script, and changes to the capture-holdout evaluation script.
+
+**Next task:** Review `ml/evaluation/inspect_binary_feature_shift.py` for correctness and code quality before designing another experiment. Do not modify the model or start a new training run until that review is complete.
+
+### Binary Feature-Shift Script Code Review — 11 October 2026
+
+**Script reviewed:** `ml/evaluation/inspect_binary_feature_shift.py`
+
+The script reads configured CIC-IDS2017 captures in chunks of 50,000 rows and retains up to 2,000 records per binary label per capture. Sampling uses random priorities and a fixed seed of 42. This bounds memory use and supports reproducibility when inputs and processing order remain unchanged.
+
+**Findings**
+1. The summary's selected-feature list includes `Destination Port`, but this feature is absent from `FEATURES`. A later filter silently excludes it, leaving three displayed features rather than four.
+2. The label mapping converts `BENIGN` to `BENIGN` and every other value to `ATTACK`. Unexpected labels are not explicitly validated.
+3. Sampling is capped separately for each binary class within each capture. Consequently, the pooled samples are not a globally uniform sample of the combined dataset.
+
+**Planned corrections:** Align the displayed feature list with the actual selected features, and validate original labels against the expected CIC-IDS2017 labels before binary mapping. Preserve the existing report and trained models. These changes are intended to improve diagnostic correctness and transparency, not model performance.
+
+**Limitation:** This code review does not establish whether the observed feature differences caused the capture-holdout model's low attack recall.
+
+### Binary Label-Validation Tests — 11 October 2026
+
+The label-validation logic in `ml/evaluation/inspect_binary_feature_shift.py` was tested independently.
+
+- `BENIGN` maps to `BENIGN`.
+- Known CIC-IDS2017 attack labels map to `ATTACK`.
+- An unexpected label raises `ValueError` and is not silently accepted.
+- Python syntax validation and `git diff --check` passed.
+
+The feature-selection summary was also corrected to list only the three selected features included in the report: `Flow Duration`, `Flow Packets/s`, and `Init_Win_bytes_forward`.
+
+These tests validate the mapping logic and script formatting; they do not validate model performance or establish the cause of the capture-holdout failure.
+
+**Next action:** Rerun the diagnostic with the label-validation correction, then compare its output with the previously recorded results. The model will not be retrained.
+
+### Binary Feature-Shift Diagnostic Rerun — 11 October 2026
+
+**Status:** Completed successfully.
+
+Reran `ml/evaluation/inspect_binary_feature_shift.py` after correcting feature selection and adding validation for unexpected original labels. The script completed without errors and generated `data/cicids2017/processed/binary_feature_shift_by_label.csv`.
+
+**Sample counts:**
+- Mon–Thu training captures: 6,036 ATTACK and 10,000 BENIGN sampled rows.
+- Friday diagnostic captures: 5,966 ATTACK and 6,000 BENIGN sampled rows.
+- Sampling was capped at 2,000 records per capture and binary label where available. Consequently, counts are not fully balanced across all labels or captures.
+
+**Selected feature observations:**
+- Median `Flow Duration` for ATTACK rows was approximately 5.62 million in Mon–Thu training captures and 63,608 in Friday diagnostic captures.
+- Median `Flow Packets/s` was approximately 1.20 in Mon–Thu ATTACK samples and 113.98 in Friday ATTACK samples.
+- Median `Init_Win_bytes_forward` was 29,200 in Mon–Thu ATTACK samples and 8,192 in Friday ATTACK samples.
+- Means substantially exceeded medians for several features, indicating skewed distributions and the need to interpret summary statistics cautiously.
+
+**Interpretation and limitations:**
+These results identify descriptive differences between the sampled dataset groups. They do not establish causation, statistical significance, or that feature shift alone explains the classifier's poor attack recall. The Friday data remains diagnostic rather than an untouched final test set. Binary ATTACK combines multiple attack families, and the capped sampling procedure does not preserve the natural class prevalence.
+
+**Next action:** Continue investigating generalization and attack-family coverage without treating aggregate accuracy as sufficient evidence of intrusion-detection quality.
+
+### Binary Feature-Shift Report Validation — 11 October 2026
+
+**Status:** CSV structure validated.
+
+The generated `binary_feature_shift_by_label.csv` contains 52 rows and 8 columns: `Dataset`, `Binary_Label`, `Feature`, `Sample_Count`, `Missing_Count`, `Median`, `Mean`, and `Std`. There are no duplicate rows and no missing values in the report fields.
+
+The report covers 13 features, two binary labels, and two dataset groups. This gives 52 summary rows.
+
+**Missing observations:** The `Flow Packets/s` and `Flow Bytes/s` summaries record missing observations in their samples. For example, Friday ATTACK has 10 missing observations for each feature; Mon–Thu ATTACK has 16. These counts describe the sampled data, not necessarily the complete source captures.
+
+**Additional observation:** `Init_Win_bytes_backward` has a BENIGN Friday median of `-1`, while the Mon–Thu ATTACK median is `235`. Do not automatically convert `-1` to missing or zero without establishing the feature's meaning and the dataset's conventions.
+
+**Interpretation:** The report is structurally consistent with 13 features × 2 labels × 2 dataset groups. Its summaries support further investigation of feature distributions but do not establish causality or statistical significance. Sampling is capped by capture and label, and differences in attack-family composition limit direct comparisons.
+
+**Next action:** Review the diagnostic script and its feature-selection and sampling logic before deciding whether a more targeted evaluation is warranted.
+
+### Binary Feature-Shift Script Review — 11 October 2026
+
+**Objective:** Inspect `ml/evaluation/inspect_binary_feature_shift.py` for correctness and reproducibility before making further diagnostic changes.
+
+**Review checklist:**
+1. Verify that the selected feature list matches the intended 13 features.
+2. Verify that the sampling procedure is deterministic and respects the per-capture, per-label limit.
+3. Verify that unexpected original labels are rejected rather than silently classified as ATTACK.
+4. Check how missing and non-finite feature values are handled when computing summary statistics.
+5. Verify the definitions of `Sample_Count`, `Missing_Count`, `Median`, `Mean`, and `Std`.
+6. Confirm that the script distinguishes descriptive feature-distribution differences from evidence of model generalization failure.
+
+**Constraint:** This is a code review only. Do not modify the dataset, retrain the model, or change evaluation methodology during this step.
+
+**Next action:** Inspect the current script and report any concrete correctness or reproducibility issues before proposing fixes.
+
+### Feature-Shift Report Code Review — 11 October 2026
+
+**Status:** Review completed; proposed correction not yet implemented.
+
+Reviewed `ml/evaluation/inspect_binary_feature_shift.py`.
+
+**Findings:**
+1. The script uses a fixed random seed and caps sampling independently by binary label within each capture.
+2. Unexpected original labels are rejected before binary mapping.
+3. Sampling converts feature values to numeric and replaces positive and negative infinity with missing values.
+4. Report generation counts all sampled rows in `Sample_Count`, counts missing values in `Missing_Count`, and computes descriptive statistics from non-missing values. It does not explicitly normalize non-finite values again during reporting.
+5. The report would be clearer with a `Valid_Count` field showing the number of observations used for each feature's statistics.
+6. The selected summary-feature filtering is redundant but does not affect the current results.
+7. The diagnostic group includes the Thursday morning WebAttacks capture, so it must not be confused with the separate capture-holdout training experiment.
+
+**Proposed next action:** Normalize non-finite values explicitly during report generation and add `Valid_Count`. Keep sampling, feature selection, model parameters, and source data unchanged. Validate the report schema and confirm that the new counts reconcile with the existing sample and missing counts.
+
+**Limitation:** This correction improves reporting consistency; it does not resolve the classifier's generalization problem or establish the cause of low attack recall.
+
+### Binary Feature-Shift Report Correction — 11 October 2026
+
+**Status:** Report regenerated successfully.
+
+Corrected the indentation of the report-generation loop in `ml/evaluation/inspect_binary_feature_shift.py`. The non-finite-value normalization and `Valid_Count` calculation now execute for each feature within each dataset and binary-label group.
+
+**Validation results:**
+- `python -m py_compile ml/evaluation/inspect_binary_feature_shift.py` completed successfully.
+- `git diff --check` completed successfully.
+- The diagnostic completed and regenerated `data/cicids2017/processed/binary_feature_shift_by_label.csv`.
+- The CSV contains 52 rows, 13 unique features, and 9 columns, including `Valid_Count`.
+- The report contains no missing values in its summary fields.
+- The three selected features appear in the printed distribution summary again.
+
+**Limitation:** The terminal paste for the final validation command appears partially corrupted. The output confirms the report dimensions and schema, but the reconciliation condition `Sample_Count = Missing_Count + Valid_Count` still requires a clean, independent check.
+
+**Next action:** Verify the count relationship across all report rows, then review the final diff before deciding whether to commit and push the correction.
+
+### Feature-Shift Report Count Reconciliation — 11 October 2026
+
+**Status:** All validation assertions passed.
+
+Independently checked `data/cicids2017/processed/binary_feature_shift_by_label.csv`.
+
+- Total report rows: 52.
+- Unique features: 13.
+- Columns: 9, including `Valid_Count`.
+- Count mismatches: 0.
+- Verified invariant for every row: `Sample_Count = Missing_Count + Valid_Count`.
+- The validation command completed with `All report validations passed.`
+
+**Conclusion:** The regenerated report has the expected dimensions and internally consistent observation counts. This validates report structure and count arithmetic, not the model's detection performance or the causal explanation for its generalization failure.
+
+**Next action:** Review the Git working-tree status and diffs before selecting files for a commit.
+

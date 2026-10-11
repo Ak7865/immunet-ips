@@ -63,8 +63,34 @@ def sample_capture(filename, dataset_name, rng):
         total_rows += len(chunk)
 
         original_labels = chunk["Label"].astype(str).str.strip()
+
+        expected_labels = {
+            "BENIGN",
+            "Bot",
+            "DDoS",
+            "DoS GoldenEye",
+            "DoS Hulk",
+            "DoS Slowhttptest",
+            "DoS slowloris",
+            "FTP-Patator",
+            "Heartbleed",
+            "Infiltration",
+            "PortScan",
+            "SSH-Patator",
+            "Web Attack Brute Force",
+            "Web Attack Sql Injection",
+            "Web Attack XSS",
+        }
+
+        unexpected_labels = set(original_labels.unique()) - expected_labels
+        if unexpected_labels:
+            raise ValueError(
+                f"Unexpected labels found in {filename}: "
+                f"{sorted(unexpected_labels)}"
+            )
+
         chunk["Binary_Label"] = np.where(
-            original_labels.str.upper().eq("BENIGN"),
+            original_labels.eq("BENIGN"),
             "BENIGN",
             "ATTACK",
         )
@@ -145,7 +171,11 @@ def main():
         sort=True,
     ):
         for feature in FEATURES:
-            values = pd.to_numeric(group[feature], errors="coerce")
+            values = pd.to_numeric(
+                group[feature],
+                errors="coerce",
+            )
+            values = values.replace([np.inf, -np.inf], np.nan)
 
             report_rows.append(
                 {
@@ -154,11 +184,13 @@ def main():
                     "Feature": feature,
                     "Sample_Count": len(group),
                     "Missing_Count": int(values.isna().sum()),
+                    "Valid_Count": int(values.notna().sum()),
                     "Median": values.median(),
                     "Mean": values.mean(),
                     "Std": values.std(),
                 }
             )
+
 
     report = pd.DataFrame(report_rows)
     report.to_csv(output_path, index=False, float_format="%.6g")
@@ -172,7 +204,6 @@ def main():
 
     print("\n=== FEATURE DISTRIBUTION SUMMARY ===")
     selected_features = [
-        "Destination Port",
         "Flow Duration",
         "Flow Packets/s",
         "Init_Win_bytes_forward",
